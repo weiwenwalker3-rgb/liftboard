@@ -37,7 +37,7 @@ export default function AuthPanel() {
 
   if (!me) return null;
   const warn = me.persistent === false
-    ? <p className="authnote">Heads up: no database is connected, so accounts reset whenever the server restarts. Add the Upstash Redis variables from the README.</p>
+    ? <p className="authnote">Heads up: no database is connected, so accounts reset whenever the server restarts. Connect Neon and Vercel Blob as described in the README.</p>
     : null;
 
   if (me.user) {

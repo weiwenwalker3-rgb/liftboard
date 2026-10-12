@@ -33,7 +33,7 @@ export const sessionCookie = (id: string) => ({
   secure: process.env.NODE_ENV === "production", path: "/", maxAge: MAX_AGE,
 });
 
-export interface User { id: string; name: string; salt: string; hash: string }
+export type User = store.UserRow;
 
 export function hashPassword(pw: string, salt = randomBytes(16).toString("hex")) {
   return { salt, hash: scryptSync(pw, salt, 64).toString("hex") };
@@ -42,14 +42,8 @@ export function checkPassword(pw: string, u: User): boolean {
   const a = Buffer.from(hashPassword(pw, u.salt).hash, "hex"), b = Buffer.from(u.hash, "hex");
   return a.length === b.length && timingSafeEqual(a, b);
 }
-export async function getUser(id: string): Promise<User | null> {
-  const raw = await store.get(`u:${id}`);
-  return raw ? (JSON.parse(raw) as User) : null;
-}
-export async function findByName(name: string): Promise<User | null> {
-  const id = await store.get(`n:${name.toLowerCase()}`);
-  return id ? getUser(id) : null;
-}
+export const getUser = (id: string) => store.getUser(id);
+export const findByName = (name: string) => store.findUserByName(name);
 /** The signed-in user for this request, or null. */
 export async function currentUser(): Promise<User | null> {
   const id = readSession(cookies().get(COOKIE)?.value);

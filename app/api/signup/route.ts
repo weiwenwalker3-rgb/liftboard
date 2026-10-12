@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { randomBytes } from "node:crypto";
-import { hashPassword, sessionCookie, type User } from "@/lib/auth";
+import { hashPassword, sessionCookie } from "@/lib/auth";
 import * as store from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -13,10 +13,7 @@ export async function POST(req: NextRequest) {
   if (pw.length < 8 || pw.length > 200) return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
   try {
     const id = randomBytes(9).toString("base64url");
-    if (!(await store.setnx(`n:${name.toLowerCase()}`, id))) return NextResponse.json({ error: "That username is taken." }, { status: 409 });
-    const user: User = { id, name, ...hashPassword(pw) };
-    await store.set(`u:${id}`, JSON.stringify(user));
-    await store.hset("names", id, name);
+    if (!(await store.createUser({ id, name, ...hashPassword(pw) }))) return NextResponse.json({ error: "That username is taken." }, { status: 409 });
     const res = NextResponse.json({ user: { id, name } });
     res.cookies.set(sessionCookie(id));
     return res;

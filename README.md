@@ -9,7 +9,7 @@ This is the prototype ported to Next.js (App Router) so it deploys to Vercel as-
 - `public/shim.js` gives the app the small database and user API it expects, backed by the routes below. Signed out, the app runs fully local in the browser.
 - `app/api/*` are the Route Handlers: `signup`, `login`, `logout`, `me`, `profiles`, and `db` (PRs, social, per-user saved log).
 - `components/AuthPanel.tsx` is the create account / sign in form on the Profile tab.
-- `lib/store.ts` talks to Upstash Redis over REST. `lib/auth.ts` hashes passwords with scrypt and signs an HttpOnly session cookie. `lib/rules.ts` validates what each user may write.
+- `lib/store.ts` is the storage layer: **Neon Postgres** holds accounts, PRs and social docs (tables are created automatically on first request), and **Vercel Blob** holds each user's private training log as `liftboard/state/<id>.json`. `lib/auth.ts` hashes passwords with scrypt and signs an HttpOnly session cookie. `lib/rules.ts` validates what each user may write.
 
 ## Run locally
 
@@ -19,14 +19,15 @@ cp .env.example .env.local   # optional locally
 npm run dev
 ```
 
-With no Redis variables, data is held in server memory (lost on restart). Fine for trying it out.
+With no `DATABASE_URL`, data is held in server memory (lost on restart), which is fine for trying it out. With no `BLOB_READ_WRITE_TOKEN`, training logs are stored in Postgres instead of Blob.
 
 ## Deploy to Vercel
 
 1. Push this folder to a GitHub repo and import it in Vercel (framework: Next.js, no build settings to change).
-2. Add storage: Project, Storage, Marketplace, **Upstash Redis** (free tier). Vercel fills in `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN` (the older `KV_REST_API_URL` and `KV_REST_API_TOKEN` also work).
-3. Add an environment variable `AUTH_SECRET` with a long random string (`openssl rand -base64 32`).
-4. Deploy. Create an account on the Profile tab.
+2. Add the database: Project, Storage, Marketplace, **Neon** (free tier). It adds `DATABASE_URL` for you. No manual schema step is needed.
+3. Add file storage: Project, Storage, **Blob**, create a **private** store and connect it to the project. This adds `BLOB_READ_WRITE_TOKEN`.
+4. Add an environment variable `AUTH_SECRET` with a long random string (`openssl rand -base64 32`).
+5. Redeploy so the new variables apply, then create an account on the Profile tab.
 
 ## Phone app
 
@@ -36,5 +37,5 @@ The site has a web manifest, so "Add to Home Screen" installs it as an app on iO
 
 - The leaderboard refreshes by polling every few seconds, not live push.
 - The video-proof rule for elite lifts is enforced in the browser only; the server checks ranges and shapes but not the rank tables.
-- No password reset or email. Usernames are the only identity. Add rate limiting (for example Upstash Ratelimit) before opening to the public.
+- No password reset or email. Usernames are the only identity. Add rate limiting before opening to the public.
 - The UI is still the prototype's plain script, not React components. It works, but changing it means editing `public/liftboard.js`.
