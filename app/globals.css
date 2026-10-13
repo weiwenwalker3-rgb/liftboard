@@ -784,3 +784,15 @@ details.lranks[open] .chev{transform:rotate(90deg)}
 .authbox .fld{width:100%;max-width:320px}
 .authbox .autherr{margin:0;color:#ff5470;font-size:13.5px}
 .authbox .authnote{margin:0;color:var(--muted);font-size:12.5px;max-width:46ch}
+
+/* ---------- lift search, reorderable watchlist ---------- */
+.lr-q{display:block;width:100%;max-width:340px;margin:12px 0 4px;background:var(--surface-2);border:2px solid transparent;border-radius:10px;padding:9px 12px}
+.lr-q:focus{border-color:var(--gold);outline:none}
+.witem{display:flex;align-items:center;border-radius:10px}
+.witem .wrow{flex:1;min-width:0}
+.witem .grip{flex:none;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:12px 8px;color:var(--muted);font-size:16px;line-height:1;letter-spacing:-2px;border-radius:8px}
+.witem .grip:hover,.witem .grip:focus-visible{color:var(--fg);background:var(--surface-2)}
+.witem.dragging{background:var(--surface-2);box-shadow:var(--shadow);position:relative;z-index:2}
+.witem.dragging .grip{cursor:grabbing}
+.wmore{display:block;width:100%;margin-top:6px;padding:9px;border:0;border-radius:10px;background:var(--surface-2);color:var(--muted);font-weight:600;font-size:13.5px;cursor:pointer}
+.wmore:hover{color:var(--fg)}

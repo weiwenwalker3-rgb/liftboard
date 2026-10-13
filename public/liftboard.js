@@ -60,8 +60,7 @@ const GROUPS = ["Legs","Push","Pull","Arms","Core","Olympic"];
 const ELITE = {"Squat":2.5, "Bench Press":1.75, "Deadlift":3};
 // practice rivals, in lb: tag, bodyweight, squat, bench, deadlift
 CAT.forEach(([n, g, sym, m, o]) => { if (m && !RANK_MIN[n]) RANK_MIN[n] = m; EX[n] = {n, g, sym, f:(o && o.bw) || 0, db:!!(o && o.db)}; });
-const BOTS = [["plate_tectonics",198,525,355,615],["hexbar_hana",132,285,165,355],["benchwarrant",221,505,405,560],["chalkbucket",176,425,285,505],
-  ["squatch",242,600,385,650],["atlas.rx",165,405,275,485],["gainz_gwen",145,295,175,365],["deadlift_dev",189,415,275,585]];
+const BOTS = [];
 
 /* ---------- helpers ---------- */
 const $ = id => document.getElementById(id);
@@ -123,8 +122,7 @@ function ensureSeen(){ if (!state.seen || !state.seen.lifts) state.seen = {lifts
 function syncSeen(doc){ ensureSeen(); const p = {bw:num(doc.bw), lifts:cleanLifts(doc.lifts), bot:false}; ARENA.forEach(A => { const rk = liftRank(p, A.name); if (rk && rk.score > (state.seen.lifts[A.name] ?? -1)) state.seen.lifts[A.name] = rk.score; }); }
 ensureSeen();
 let submitting = false;
-const ui = {muscle:"", rkGroup:"All", rkEx:"", scope:"all", pendingRef:"", froze:0, lost:0, tab:"arena", ex:"Squat", metric:"e1rm", range:180, board:"total", claimLift:"Squat", ladderLift:"Squat", bots:null};
-try { const b = localStorage.getItem(KEY+".bots"); if (b) ui.bots = b === "on"; } catch(e){}
+const ui = {muscle:"", rkGroup:"All", rkQ:"", watchOpen:false, rkEx:"", scope:"all", pendingRef:"", froze:0, lost:0, tab:"arena", ex:"Squat", metric:"e1rm", range:180, board:"total", claimLift:"Squat", ladderLift:"Squat", bots:null};
 
 /* ---------- accounts + shared board (db + user capabilities) ---------- */
 let db = null, user = null, myId = null, cloud = false, canPost = true, me = null;
@@ -183,7 +181,7 @@ function players(){
     list.push({id, me: cloud ? id === myId : true, bot:false, tag:String(d.tag||"").slice(0,20), bw:num(d.bw), lifts:cleanLifts(d.lifts), history:Array.isArray(d.history) ? d.history.slice(0,10) : []});
   });
   const realCount = list.length;
-  const showBots = ui.bots === null ? realCount < 4 : ui.bots;
+  const showBots = false;
   if (showBots) BOTS.forEach(([tag,bw,sq,bp,dl],i) => list.push({id:"bot-"+tag, bot:true, tag, bw:bw/LB,
     lifts:{"Squat":{kg:sq/LB,date:daysAgo(3+i*4)},"Bench Press":{kg:bp/LB,date:daysAgo(5+i*3)},"Deadlift":{kg:dl/LB,date:daysAgo(1+i*5)}},
     history:[{lift:"Deadlift",kg:dl/LB,at:daysAgo(1+i*5)},{lift:"Squat",kg:sq/LB,at:daysAgo(3+i*4)},{lift:"Bench Press",kg:bp/LB,at:daysAgo(5+i*3)}]}));
@@ -577,7 +575,7 @@ function directory(){
   const {list} = players();
   list.forEach(p => { if (!p.me) map[p.id] = p; });
   Object.entries(social).forEach(([id, d]) => { if (id !== myId && !map[id]) map[id] = {id, me:false, bot:false, tag:String((d && d.tag) || "").slice(0,20), bw:state.profile.bw, lifts:{}, history:[]}; });
-  (state.friends || []).forEach(id => { if (!map[id] && id.startsWith("bot-")) map[id] = {id, me:false, bot:true, tag:id.slice(4), bw:state.profile.bw, lifts:{}, history:[]}; });
+  (state.friends || []).forEach(id => { if (false && !map[id] && id.startsWith("bot-")) map[id] = {id, me:false, bot:true, tag:id.slice(4), bw:state.profile.bw, lifts:{}, history:[]}; });
   return map;
 }
 function codeOwner(code){
@@ -1164,13 +1162,28 @@ $("addFriend").addEventListener("submit", e => { e.preventDefault(); const c = $
 
 /* ---------- training ---------- */
 let mainGeo = null;
-function renderTrain(){
-  const watchL = [...LIFTS, ...CAT.filter(c => !LIFTS.some(L => L.name === c[0]) && state.lifts.some(l => l.ex === c[0])).map(c => ({name:c[0], sym:c[2]}))];
-  $("watch").innerHTML = watchL.map(L => {
+const WATCH_MAX = 6;
+function watchList(){
+  const all = [...LIFTS, ...CAT.filter(c => !LIFTS.some(L => L.name === c[0]) && state.lifts.some(l => l.ex === c[0])).map(c => ({name:c[0], sym:c[2]}))];
+  const ord = state.liftOrder || [];
+  return all.map((L, i) => ({L, i, o:ord.indexOf(L.name)})).sort((a, b) => (a.o < 0 ? 1e6 + a.i : a.o) - (b.o < 0 ? 1e6 + b.i : b.o)).map(x => x.L);
+}
+function renderWatch(){
+  const list = watchList(), over = list.length > WATCH_MAX, open = !over || ui.watchOpen, shown = open ? list : list.slice(0, WATCH_MAX);
+  $("watch").innerHTML = shown.map(L => {
     const pts = inRange(series(L.name,"e1rm"),90), c = change(pts), last = pts.length ? pts[pts.length-1].v : 0;
-    return `<button class="wrow" type="button" data-ex="${esc(L.name)}" aria-pressed="${L.name===ui.ex}"><span><span class="nm">${esc(L.name)}</span><br><span class="sub">Est. 1RM</span></span>
-      <canvas data-spark="${esc(L.name)}"></canvas><span class="rt">${last ? W(last) : "—"}<br><span class="chg ${c && c.pct >= 0 ? "up" : "down"}">${c ? (c.pct>=0?"+":"")+c.pct.toFixed(1)+"%" : ""}</span></span></button>`;
-  }).join("");
+    return `<div class="witem" data-name="${esc(L.name)}"><button class="wrow" type="button" data-ex="${esc(L.name)}" aria-pressed="${L.name===ui.ex}"><span><span class="nm">${esc(L.name)}</span><br><span class="sub">Est. 1RM</span></span>
+      <canvas data-spark="${esc(L.name)}"></canvas><span class="rt">${last ? W(last) : "—"}<br><span class="chg ${c && c.pct >= 0 ? "up" : "down"}">${c ? (c.pct>=0?"+":"")+c.pct.toFixed(1)+"%" : ""}</span></span></button><span class="grip" role="button" tabindex="0" aria-label="Drag to reorder ${esc(L.name)}. Arrow keys move it." title="Drag to reorder">⋮⋮</span></div>`;
+  }).join("") + (over ? `<button class="wmore" type="button" id="watchMore" aria-expanded="${open}">${open ? "Show fewer" : "Show " + (list.length - WATCH_MAX) + " more"}</button>` : "");
+  document.querySelectorAll("#watch canvas[data-spark]").forEach(cv => drawChart(cv, inRange(series(cv.dataset.spark,"e1rm"),90), {mini:true}));
+}
+function saveWatchOrder(){
+  const names = [...$("watch").querySelectorAll(".witem")].map(x => x.dataset.name);
+  state.liftOrder = names.concat(watchList().map(L => L.name).filter(n => !names.includes(n)));
+  save();
+}
+function renderTrain(){
+  renderWatch();
   const L = LIFTS.find(l => l.name === ui.ex) || {name:ui.ex, sym:(EX[ui.ex] && EX[ui.ex].sym) || "LIFT"};
   $("cSym").textContent = L.sym + " · " + {e1rm:"EST. 1RM", top:"TOP SET", vol:"SESSION VOLUME"}[ui.metric] + " · " + unit().toUpperCase();
   $("cName").textContent = L.name;
@@ -1193,6 +1206,38 @@ function renderTrain(){
   renderLiftRanks();
   drawTrainCharts();
 }
+
+let wdrag = null;
+$("watch").addEventListener("pointerdown", e => {
+  const g = e.target.closest(".grip"); if (!g) return;
+  e.preventDefault();
+  $("watch").setPointerCapture(e.pointerId);
+  wdrag = {item:g.closest(".witem"), id:e.pointerId, moved:false};
+  wdrag.item.classList.add("dragging");
+});
+$("watch").addEventListener("pointermove", e => {
+  if (!wdrag || e.pointerId !== wdrag.id) return;
+  wdrag.moved = true;
+  const box = $("watch"), others = [...box.querySelectorAll(".witem")].filter(x => x !== wdrag.item);
+  const before = others.find(it => { const r = it.getBoundingClientRect(); return e.clientY < r.top + r.height/2; }) || null;
+  if (before !== wdrag.item.nextElementSibling && !(before === null && wdrag.item.nextElementSibling === $("watchMore"))) box.insertBefore(wdrag.item, before || $("watchMore"));
+});
+const wdragEnd = e => {
+  if (!wdrag || e.pointerId !== wdrag.id) return;
+  const d = wdrag; wdrag = null; d.item.classList.remove("dragging");
+  if (d.moved) saveWatchOrder();
+};
+$("watch").addEventListener("pointerup", wdragEnd);
+$("watch").addEventListener("pointercancel", wdragEnd);
+$("watch").addEventListener("keydown", e => {
+  const g = e.target.closest(".grip"); if (!g || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+  e.preventDefault();
+  const item = g.closest(".witem"), up = e.key === "ArrowUp", sib = up ? item.previousElementSibling : item.nextElementSibling;
+  if (!sib || !sib.classList.contains("witem")) return;
+  $("watch").insertBefore(item, up ? sib : sib.nextElementSibling);
+  saveWatchOrder();
+  item.querySelector(".grip").focus();
+});
 
 /* ---------- body rank ---------- */
 const MUSCLES = [["chest","Chest"],["shoulders","Shoulders"],["traps","Traps"],["biceps","Biceps"],["triceps","Triceps"],["forearms","Forearms"],["abs","Abs"],["lats","Back"],["lowerback","Lower back"],["glutes","Glutes"],["abductors","Abductors"],["adductors","Adductors"],["quads","Quads"],["hamstrings","Hamstrings"],["calves","Calves"]];
@@ -1324,14 +1369,14 @@ function renderBodySel(){
   setHTML($("brList"), MUSCLES.map(([k]) => { const x = B.m[k]; return `<button type="button" data-m="${k}" aria-pressed="${k === ui.muscle}" style="${x.rk ? `--rc:${RANKS[x.rk.i].c1}` : ""}"><i></i>${esc(x.name)}<small>${x.rk ? esc(x.rk.label) : "—"}</small></button>`; }).join(""));
 }
 function lfLabel(){ const e = EX[$("lfEx").value]; $("lfWl").textContent = e && e.f ? `Added weight (${unit()}, 0 = bodyweight)` : e && e.db ? `Weight per dumbbell (${unit()})` : `Weight (${unit()})`; $("lfW").min = 0; }
-function renderLiftRanks(){
-  renderBody();
-  const bw = state.profile.bw, G = ui.rkGroup || "All";
+function renderLiftRanks(gridOnly){
+  if (!gridOnly) renderBody();
+  const bw = state.profile.bw, G = ui.rkGroup || "All", q = (ui.rkQ || "").trim().toLowerCase();
   const all = CAT.map(c => ({n:c[0], g:c[1], rk:logRank(c[0])}));
   const ranked = all.filter(x => x.rk);
   $("lrCount").textContent = `${ranked.length} of ${all.length} lifts ranked`;
-  $("lrSeg").innerHTML = ["All","Ranked",...GROUPS].map(g => `<button type="button" data-v="${g}" aria-pressed="${g === G}">${g}</button>`).join("");
-  const list = G === "All" ? all : G === "Ranked" ? ranked : all.filter(x => x.g === G);
+  $("lrSeg").innerHTML = ["All","Ranked",...GROUPS].map(g => `<button type="button" data-v="${g}" aria-pressed="${g === G && !q}">${g}</button>`).join("");
+  const list = q ? all.filter(x => x.n.toLowerCase().includes(q)) : G === "All" ? all : G === "Ranked" ? ranked : all.filter(x => x.g === G);
   if (!ui.rkEx || !EX[ui.rkEx]) ui.rkEx = (ranked[0] && ranked[0].n) || "Pull-ups";
   embP = "r"; embN = 0;
   const prog = rk => { const nt = nextTier(rk); if (!nt) return 100; const [lo, hi] = rankBand(rk.lift, rk.i), band = (hi - lo)/3, start = lo + band*(rk.tier - 1); return Math.max(4, Math.min(100, Math.round((rk.ratio - start)/band*100))); };
@@ -1340,7 +1385,7 @@ function renderLiftRanks(){
       <span class="lr-e">${rk ? emblem(rk.i, 34, false, rk.tier) : emblem(0, 34, true, 0)}</span>
       <span class="lr-n">${esc(x.n)}<small>${rk ? esc(rk.label) : "Unranked"}</small></span>
       ${rk ? `<span class="lr-p"><i style="width:${prog(rk)}%"></i></span>` : ""}</button>`; }).join("")
-    : `<p class="hint">No ranked lifts yet. Log a set of any lift to rank it.</p>`);
+    : `<p class="hint">${q ? "No lifts match \u201c" + esc(ui.rkQ.trim()) + "\u201d." : "No ranked lifts yet. Log a set of any lift to rank it."}</p>`);
 
   const ex = ui.rkEx, e = EX[ex], rk = logRank(ex), f = e.f;
   const cols = f ? [["bw","Reps at BW"],[1,"Added ×1"],[5,"Added ×5"]] : [[1,"1 rep"],[5,"5 reps"],[10,"10 reps"]];
@@ -1467,8 +1512,6 @@ function renderProfile(){
   $("pBl").textContent = `Bodyweight (${unit()})`;
   document.querySelectorAll("#unitSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === unit()));
   document.querySelectorAll("#modeSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === state.settings.mode));
-  const bots = players().showBots;
-  document.querySelectorAll("#botSeg button").forEach(b => b.setAttribute("aria-pressed", (b.dataset.v === "on") === bots));
   $("swatches").innerHTML = Object.entries(THEMES).map(([k,t]) => `<button class="sw" type="button" data-theme-k="${k}" aria-pressed="${state.settings.graph===k}"><i style="--c:${t.c}"></i>${t.name}</button>`).join("");
   $("wipe").hidden = false; $("wipeYes").hidden = true;
 }
@@ -1491,7 +1534,8 @@ let toastT; function toast(m){ const el = $("toast"); el.textContent = m; el.hid
 function commit(m){ save(); renderAll(); if (m) toast(m); checkProgress(); }
 
 document.querySelectorAll("nav.tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
-$("watch").addEventListener("click", e => { const b = e.target.closest("[data-ex]"); if (b){ ui.ex = b.dataset.ex; $("lfEx").value = ui.ex; renderTrain(); } });
+$("watch").addEventListener("click", e => {
+  if (e.target.closest("#watchMore")){ ui.watchOpen = !ui.watchOpen; renderWatch(); return; } const b = e.target.closest("[data-ex]"); if (b){ ui.ex = b.dataset.ex; $("lfEx").value = ui.ex; renderTrain(); } });
 $("metricSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.metric = b.dataset.v; renderTrain(); } });
 $("rangeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.range = +b.dataset.v; renderTrain(); } });
 $("lfEx").innerHTML = GROUPS.map(g => `<optgroup label="${g}">${CAT.filter(c => c[1] === g).map(c => `<option>${esc(c[0])}</option>`).join("")}</optgroup>`).join("");
@@ -1501,9 +1545,10 @@ $("lfEx").addEventListener("change", () => { lfLabel(); if (EX[$("lfEx").value] 
 $("bodyRank").addEventListener("click", e => {
   const m = e.target.closest("[data-m]"), r = e.target.closest("[data-rk]");
   if (m){ ui.muscle = m.dataset.m; renderBodySel(); }
-  if (r){ ui.rkEx = r.dataset.rk; ui.rkGroup = "All"; $("lranks").open = true; renderLiftRanks(); setTimeout(() => { const t = $("lrGrid").querySelector(`[data-rk="${CSS.escape(r.dataset.rk)}"]`); if (t) t.scrollIntoView({block:"nearest"}); $("lrDet").scrollIntoView({behavior:"smooth", block:"center"}); }, 60); }
+  if (r){ ui.rkEx = r.dataset.rk; ui.rkGroup = "All"; ui.rkQ = ""; $("lrQ").value = ""; $("lranks").open = true; renderLiftRanks(); setTimeout(() => { const t = $("lrGrid").querySelector(`[data-rk="${CSS.escape(r.dataset.rk)}"]`); if (t) t.scrollIntoView({block:"nearest"}); $("lrDet").scrollIntoView({behavior:"smooth", block:"center"}); }, 60); }
 });
-$("lrSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.rkGroup = b.dataset.v; renderLiftRanks(); } });
+$("lrQ").addEventListener("input", e => { ui.rkQ = e.target.value; renderLiftRanks(true); });
+$("lrSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.rkGroup = b.dataset.v; ui.rkQ = ""; $("lrQ").value = ""; renderLiftRanks(); } });
 $("lrGrid").addEventListener("click", e => { const b = e.target.closest("[data-rk]"); if (b){ ui.rkEx = b.dataset.rk; renderLiftRanks(); if (matchMedia("(max-width:860px)").matches) $("lrDet").scrollIntoView({behavior:"smooth", block:"nearest"}); } });
 $("lrDet").addEventListener("click", e => { const b = e.target.closest("[data-logit]"); if (b){ $("lfEx").value = b.dataset.logit; lfLabel(); if (EX[b.dataset.logit].f) $("lfW").value = 0; liftHint(); $("lfW").focus(); $("liftForm").scrollIntoView({behavior:"smooth", block:"center"}); } });
 $("liftForm").addEventListener("submit", e => {
@@ -1539,7 +1584,6 @@ $("profForm").addEventListener("submit", async e => {
 $("unitSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ state.settings.unit = b.dataset.v; commit("Showing weights in " + b.dataset.v); } });
 $("modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ state.settings.mode = b.dataset.v; applyTheme(); commit(); } });
 $("swatches").addEventListener("click", e => { const b = e.target.closest("[data-theme-k]"); if (b){ state.settings.graph = b.dataset.themeK; applyTheme(); commit("Graph theme: " + THEMES[b.dataset.themeK].name); } });
-$("botSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.bots = b.dataset.v === "on"; try { localStorage.setItem(KEY+".bots", b.dataset.v); } catch(err){} renderAll(); } });
 $("clearSample").addEventListener("click", () => { state.lifts = state.lifts.filter(l => !l.sample); state.foods = state.foods.filter(f => !f.sample); commit("Sample data removed"); });
 $("loadSample").addEventListener("click", () => { const s = seed(); state.lifts = s.lifts; state.foods = s.foods; commit("Sample training data loaded"); });
 $("wipe").addEventListener("click", () => { $("wipe").hidden = true; $("wipeYes").hidden = false; });
