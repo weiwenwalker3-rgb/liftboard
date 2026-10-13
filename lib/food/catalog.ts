@@ -3,7 +3,7 @@ import { type Food, dedupeKey, dupKeys, matchesQuery } from "./model";
 import { foodReady, foodSql } from "./db";
 import { isChainFood } from "./chains";
 import { searchUsda, searchUsdaBasic, usdaByBarcode, UpstreamError } from "./usda";
-import { generalize, isPrepared } from "./generic";
+import { generalize, isPrepared, hintQueries } from "./generic";
 import { searchOff, offByBarcode } from "./off";
 
 const TTL_MS = 24 * 3600 * 1000;
@@ -133,6 +133,11 @@ export async function searchFoods(q: string, source: SourcePick, page: number, p
   if (page === 1 && source !== "off") {
     asked++;
     try { basicRaw = (await adapters.searchUsdaBasic(nq)).foods; answered++; } catch (e) { note("USDA FoodData Central", e); }
+    if (!restaurantTab && basicRaw.length) {
+      const more = await Promise.allSettled(hintQueries(nq).map(h => adapters.searchUsdaBasic(h)));
+      const seen = new Set(basicRaw.map(f => f.id));
+      for (const r of more) if (r.status === "fulfilled") for (const f of r.value.foods) if (!seen.has(f.id)) { seen.add(f.id); basicRaw.push(f); }
+    }
     const rel = basicRaw.filter(f => matchesQuery(f, nq));
     generic = restaurantTab ? [] : generalize(rel.filter(f => !isChainFood(f)), nq);
   }

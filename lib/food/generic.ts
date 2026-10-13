@@ -57,6 +57,19 @@ COMMON.oatmeal = COMMON.oat;
 
 const BEEF_CUTS: Opt[] = [o("Sirloin steak, raw", /^beef, top sirloin.*separable lean only.*\braw\b/), o("Ribeye steak, raw", /rib eye.*separable lean only.*\braw\b/), o("Strip steak, raw", /top loin.*separable lean only.*\braw\b/), o("Tenderloin, raw", /tenderloin.*separable lean only.*\braw\b/), o("Flank steak, raw", /flank.*separable lean only.*\braw\b/), o("Chuck roast, raw", /chuck.*separable lean only.*\braw\b/)];
 
+// Extra USDA lookups for broad meat searches, since one query page does not reach every common cut.
+const HINTS: Record<string, string[]> = {
+  chicken: ["chicken breast meat only raw", "chicken thigh meat only raw", "chicken drumstick meat only raw", "chicken wing raw", "chicken ground raw"],
+  turkey: ["turkey breast meat only raw", "turkey ground raw", "turkey thigh raw"],
+  pork: ["pork loin separable lean raw", "pork tenderloin raw", "pork ground raw", "pork bacon cooked", "pork ham sliced", "pork spareribs raw"],
+  bacon: ["pork cured bacon cooked", "pork cured bacon raw"],
+  beef: ["beef ground raw", "beef top sirloin separable lean raw", "beef rib eye separable lean raw", "beef top loin separable lean raw", "beef tenderloin separable lean raw", "beef flank separable lean raw", "beef chuck separable lean raw"],
+  potato: ["potatoes russet raw", "potatoes red raw", "potatoes white raw", "sweet potato raw"],
+  tuna: ["fish tuna light canned in water", "fish tuna light canned in oil", "fish tuna fresh raw"],
+};
+HINTS.oat = HINTS.oatmeal = ["cereals oats regular and quick dry", "cereals oats regular and quick cooked with water"];
+export const hintQueries = (q: string): string[] => HINTS[words(q).map(stem).join(" ")] || [];
+
 function curated(foods: Food[], qw: string[], q: string): Food[] | null {
   const key = qw.join(" ");
   const opts = key === "beef" ? BEEF_CUTS : COMMON[key];
