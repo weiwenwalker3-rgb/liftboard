@@ -263,3 +263,24 @@ test("generalize: same macros merge into one entry", () => {
   const two = generalize([sr("Spinach, raw", 23), sr("Kale, raw", 23)].map(f => ({ ...f, protein: 2.9, carbs: 3.6 })), "raw");
   assert.equal(two.length, 1);
 });
+test("generalize: broad searches show curated common options", () => {
+  const eggs = generalize([
+    sr("Egg, whole, raw, fresh", 143), sr("Egg, white, raw, fresh", 52), sr("Egg, yolk, raw, fresh", 322),
+    sr("Egg, whole, cooked, hard-boiled", 155), sr("Egg, whole, cooked, scrambled", 149), sr("Egg, whole, cooked, fried", 196), sr("Egg, whole, dried", 600),
+  ], "egg").map(f => f.name);
+  assert.deepEqual(eggs, ["Egg, whole, raw", "Egg white, raw", "Egg yolk, raw", "Egg, hard-boiled", "Egg, scrambled", "Egg, fried"]);
+  const milk = generalize([sr("Milk, whole, 3.25% milkfat", 61), sr("Milk, reduced fat, fluid, 2% milkfat", 50), sr("Milk, lowfat, fluid, 1% milkfat", 42), sr("Milk, nonfat, fluid", 34), sr("Milk, dry, whole", 496)], "milk").map(f => f.name);
+  assert.deepEqual(milk, ["Milk, whole", "Milk, 2%", "Milk, 1%", "Milk, skim"]);
+  const cheese = generalize([sr("Cheese, cheddar", 403), sr("Cheese, mozzarella, whole milk", 300), sr("Cheese, swiss", 380)], "cheese").map(f => f.name);
+  assert.deepEqual(cheese, ["Cheddar", "Mozzarella", "Swiss"]);
+});
+test("generalize: dried, powder and chips are hidden unless typed", () => {
+  const g = generalize([sr("Apples, raw, with skin", 52), sr("Apples, dried, sulfured", 243), sr("Potato chips, plain", 536)], "apple");
+  assert.deepEqual(g.map(f => f.name), ["Apples, raw, with skin"]);
+  assert.ok(isPrepared("Apples, dried", "apple"));
+  assert.ok(!isPrepared("Apples, dried", "dried apple"));
+});
+test("generalize: unmatched curated lists fall back to normal grouping", () => {
+  const g = generalize([sr("Egg, mystery", 100)], "egg");
+  assert.ok(g.length >= 1);
+});

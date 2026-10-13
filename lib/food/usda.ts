@@ -96,7 +96,7 @@ async function usdaPage(q: string, types: string, page: number, pageSize: number
 }
 
 /** Plain ingredients (Foundation, SR Legacy). One wide page; the caller generalizes and ranks them. */
-export const searchUsdaBasic = (q: string) => usdaPage(q, "Foundation,SR Legacy", 1, 150);
+export const searchUsdaBasic = (q: string) => usdaPage(q, "Foundation,SR Legacy", 1, 200);
 
 /** Packaged products (Branded). */
 export const searchUsda = (q: string, page: number, pageSize: number) => usdaPage(q, "Branded", page, pageSize);
