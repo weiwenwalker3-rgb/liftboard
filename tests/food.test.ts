@@ -148,3 +148,36 @@ test("OFF records with impossible per-100 values are dropped and values are roun
   assert.equal(normalizeOff({ code: "1", product_name: "Pack", nutriments: { "energy-kcal_100g": 3166, proteins_100g: 333, carbohydrates_100g: 133, fat_100g: 141 } }), null);
   assert.equal(normalizeOff({ code: "2", product_name: "Sauce", nutriments: { "energy-kcal_100g": 33.82663847, proteins_100g: 0, carbohydrates_100g: 1.4799154, fat_100g: 2.9598 } })!.kcal, 33.8);
 });
+
+import { chainsIn, isChainFood } from "../lib/food/chains";
+test("chain detection needs the whole name", () => {
+  assert.ok(chainsIn("chick fil a").length);
+  assert.ok(chainsIn("chickfila").length);
+  assert.ok(chainsIn("mcdonald's fries").length);
+  assert.equal(chainsIn("chick").length, 0);
+  assert.equal(chainsIn("chick fil").length, 0);
+  assert.equal(chainsIn("cavatappi pasta").length, 0); // "cava" must not match inside a word
+  assert.ok(isChainFood({ name: "CHICK-FIL-A, chicken sandwich", brand: null, category: "Fast Foods" }));
+  assert.ok(isChainFood({ name: "Fries", brand: "McDonald's", category: null }));
+  assert.ok(!isChainFood({ name: "Potatoes, russet, raw", brand: null, category: "Vegetables" }));
+});
+test("search hides chain items until the chain is spelled out and leads with whole foods", async () => {
+  const whole = { ...usda[0], id: "usda:w", name: "Chicken, breast, roasted", brand: null, category: "Poultry Products" };
+  const chainItem = { ...usda[1], id: "usda:c", name: "CHICK-FIL-A, chicken sandwich", brand: null, category: "Fast Foods", barcode: null, kcal: 249, protein: 16, carbs: 21, fat: 11 };
+  const branded = { ...usda[1], id: "usda:b", name: "Chicken breast strips", brand: "Tyson", barcode: null, kcal: 150, protein: 20, carbs: 5, fat: 5 };
+  const offChain = { ...off[1], id: "off:cfa", name: "Chicken sandwich", brand: "Chick-fil-A", kcal: 300, protein: 20, carbs: 30, fat: 10 };
+  adapters.searchUsda = async () => ({ foods: [branded, chainItem, whole], total: 3 });
+  adapters.searchOff = async () => ({ foods: [offChain], total: 1 });
+  const plain = await searchFoods("chicken", "all", 1);
+  assert.deepEqual(plain.foods.map(f => f.id), ["usda:w", "usda:b"]);
+  const spelled = await searchFoods("chick fil a chicken", "all", 1);
+  assert.deepEqual(new Set(spelled.foods.map(f => f.id)), new Set(["usda:c", "off:cfa"]));
+});
+test("imported restaurant items need the full restaurant name", async () => {
+  const { foods } = importRestaurantCsv("item,calories,protein,carbs,fat\nSpecial Wrap,500,30,50,20", { ...META, restaurant: "Zeta Grill" });
+  await upsertFoods(foods);
+  adapters.searchUsda = async () => ({ foods: [], total: 0 });
+  adapters.searchOff = async () => ({ foods: [], total: 0 });
+  assert.equal((await searchFoods("special wrap", "all", 1)).foods.length, 0);
+  assert.equal((await searchFoods("zeta grill special wrap", "all", 1)).foods.length, 1);
+});

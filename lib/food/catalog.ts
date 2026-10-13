@@ -1,6 +1,7 @@
 // Catalog access: upsert, lookup, cached merged search across sources.
 import { type Food, dedupeKey, dupKeys, matchesQuery } from "./model";
 import { foodReady, foodSql } from "./db";
+import { chainsIn, isChainFood } from "./chains";
 import { searchUsda, usdaByBarcode, UpstreamError } from "./usda";
 import { searchOff, offByBarcode } from "./off";
 
@@ -121,7 +122,9 @@ export async function searchFoods(q: string, source: SourcePick, page: number, p
   if (source !== "usda") jobs.push(["Open Food Facts", adapters.searchOff(nq, page, pageSize)]);
   const settled = await Promise.allSettled(jobs.map(j => j[1]));
   const lists: Food[][] = [];
-  const local = page === 1 ? await searchRestaurants(nq, 5).catch(() => []) : [];
+  // Imported restaurant items and chain-branded foods only appear once the whole chain name is in the query.
+  const local = page === 1 ? (await searchRestaurants(nq, 5).catch(() => [])).filter(f => chainsIn(nq, f.brand ? [f.brand] : []).length > 0) : [];
+  const chain = local.length > 0 || chainsIn(nq).length > 0;
   let total = 0;
   settled.forEach((s, i) => {
     if (s.status === "fulfilled") { lists.push(s.value.foods); total += s.value.total; }
@@ -130,7 +133,11 @@ export async function searchFoods(q: string, source: SourcePick, page: number, p
       notices.push(`${jobs[i][0]} is unavailable${e?.status === 429 ? " (rate limited)" : ""}; showing results from the other sources.`);
     }
   });
-  const foods = mergeResults((local.length ? [local, ...lists] : lists).map(l => l.filter(f => f.source === "restaurant" || matchesQuery(f, nq))));
+  const relevant = lists.map(l => l.filter(f => matchesQuery(f, nq) && (chain || !isChainFood(f))));
+  // Whole foods and plain ingredients (USDA entries without a brand) lead; branded and packaged items follow.
+  const whole = relevant.flatMap(l => l.filter(f => f.source === "usda" && !f.brand));
+  const rest = relevant.map(l => l.filter(f => !(f.source === "usda" && !f.brand)));
+  const foods = mergeResults([[...local, ...whole, ...mergeResults(rest)]]);
   if (settled.some(s => s.status === "fulfilled")) {
     await upsertFoods(foods.filter(f => f.source !== "restaurant")).catch(() => {});
     // Only cache when every requested source answered, so a transient failure is not pinned for 24 h.
