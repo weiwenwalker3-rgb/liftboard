@@ -26,6 +26,8 @@
   --shadow:0 4px 0 rgba(0,0,0,.4); --lift:0 10px 30px rgba(0,0,0,.35); color-scheme:dark;
 }
 *{box-sizing:border-box}
+html,body{margin:0}
+html{-webkit-text-size-adjust:100%}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font:15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
 h1,h2,h3,h4{font-family:var(--f-display);font-weight:400;line-height:1.15;margin:0;text-wrap:balance;letter-spacing:.01em}
@@ -796,3 +798,16 @@ details.lranks[open] .chev{transform:rotate(90deg)}
 .witem.dragging .grip{cursor:grabbing}
 .wmore{display:block;width:100%;margin-top:6px;padding:9px;border:0;border-radius:10px;background:var(--surface-2);color:var(--muted);font-weight:600;font-size:13.5px;cursor:pointer}
 .wmore:hover{color:var(--fg)}
+
+/* ---------- small phones: keep the header inside the screen ---------- */
+@media (max-width:700px){
+  .chip-me .nm{max-width:84px;overflow:hidden;text-overflow:ellipsis;display:inline-block;vertical-align:middle}
+  .hright{min-width:0}
+}
+@media (max-width:400px){
+  .bar{gap:8px;padding-inline:12px}
+  .brand{font-size:16px;letter-spacing:.03em;gap:7px}
+  .brand .mark{width:26px;height:26px}
+  .hright{gap:6px}
+  .chip-me{gap:6px;padding-right:9px}
+}
