@@ -159,7 +159,7 @@ export default function FoodSearch() {
       </div>
       {isSearch ? (
         <div className="fs-row">
-          <input className="fs-q" type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "restaurants" ? "Search restaurant items or chains" : "Search foods or brands (chicken breast, Greek yogurt…)"} aria-label="Search foods" autoComplete="off" spellCheck={false} />
+          <input className="fs-q" type="search" value={q} onChange={e => setQ(e.target.value)} placeholder={tab === "restaurants" ? "Search a restaurant (chick fil a, mcdonalds, subway)" : "Search foods or brands (chicken breast, Greek yogurt…)"} aria-label="Search foods" autoComplete="off" spellCheck={false} />
           <input className="fs-code" inputMode="numeric" value={code} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === "Enter" && code.trim()) scan(); }} placeholder="Barcode" aria-label="Barcode" />
           <button type="button" className="btn" onClick={scan} disabled={code.replace(/\D/g, "").length < 8 || busy}>Look up</button>
         </div>
@@ -238,7 +238,7 @@ export default function FoodSearch() {
             })}
           </ul>
           {busy ? <p className="hint">{isSearch ? "Searching…" : "Loading…"}</p> : null}
-          {isSearch && !busy && q.trim().length >= 2 && !foods.length && !err ? <p className="hint">{tab === "restaurants" ? "No restaurant items imported for that search yet." : "No matches. Try fewer words, or add a custom food below."}</p> : null}
+          {isSearch && !busy && q.trim().length >= 2 && !foods.length && !err ? <p className="hint">{tab === "restaurants" ? "No restaurant matches. Try the restaurant name, like chick fil a or mcdonalds." : "No matches. Try fewer words, or add a custom food below."}</p> : null}
           {!isSearch && !busy && signedIn && !foods.length && !err ? <p className="hint">Nothing here yet.</p> : null}
           {tab === "search" && foods.length && foods.length < total && !busy ? <button type="button" className="btn" onClick={() => run(q.trim(), page + 1, true)}>Load more</button> : null}
         </>

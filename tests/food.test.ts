@@ -96,9 +96,11 @@ test("restaurant import rejects missing source or columns", () => {
   assert.throws(() => importRestaurantCsv("item,calories,protein,carbs,fat\nx,1,1,1,1", { ...META, sourceUrl: "http://x" }));
   assert.equal(parseCsv('a,"b ""q"" c"\n1,2').length, 2);
 });
-test("restaurant items are found by name or chain and not hit upstream when source=restaurant", async () => {
+test("restaurant tab finds imported items by name or chain", async () => {
   const { foods } = importRestaurantCsv("item,calories,protein,carbs,fat\nChicken Sandwich,440,28,40,19", META);
   await upsertFoods(foods);
+  adapters.searchUsda = async () => ({ foods: [], total: 0 });
+  adapters.searchOff = async () => ({ foods: [], total: 0 });
   const r = await searchFoods("test diner sandwich", "restaurant", 1);
   assert.equal(r.foods.length, 1);
   assert.equal((await searchFoods("chicken", "restaurant", 1)).foods.length, 1);
@@ -161,7 +163,7 @@ test("chain detection needs the whole name", () => {
   assert.ok(isChainFood({ name: "Fries", brand: "McDonald's", category: null }));
   assert.ok(!isChainFood({ name: "Potatoes, russet, raw", brand: null, category: "Vegetables" }));
 });
-test("search hides chain items until the chain is spelled out and leads with whole foods", async () => {
+test("search hides chain items outside the Restaurants tab and leads with whole foods", async () => {
   const whole = { ...usda[0], id: "usda:w", name: "Chicken, breast, roasted", brand: null, category: "Poultry Products" };
   const chainItem = { ...usda[1], id: "usda:c", name: "CHICK-FIL-A, chicken sandwich", brand: null, category: "Fast Foods", barcode: null, kcal: 249, protein: 16, carbs: 21, fat: 11 };
   const branded = { ...usda[1], id: "usda:b", name: "Chicken breast strips", brand: "Tyson", barcode: null, kcal: 150, protein: 20, carbs: 5, fat: 5 };
@@ -170,14 +172,20 @@ test("search hides chain items until the chain is spelled out and leads with who
   adapters.searchOff = async () => ({ foods: [offChain], total: 1 });
   const plain = await searchFoods("chicken", "all", 1);
   assert.deepEqual(plain.foods.map(f => f.id), ["usda:w", "usda:b"]);
-  const spelled = await searchFoods("chick fil a chicken", "all", 1);
-  assert.deepEqual(new Set(spelled.foods.map(f => f.id)), new Set(["usda:c", "off:cfa"]));
+  const spelledAll = await searchFoods("chick fil a chicken", "all", 1);
+  assert.equal(spelledAll.foods.length, 0); // chain items never show outside the Restaurants tab
+  const tab = await searchFoods("chick fil a chicken", "restaurant", 1);
+  const ids = (r: { foods: { id: string }[] }) => new Set(r.foods.map(f => f.id));
+  assert.ok(ids(tab).has("usda:c") && ids(tab).has("off:cfa"));
+  const tabPlain = await searchFoods("chicken", "restaurant", 1);
+  assert.ok(!ids(tabPlain).has("usda:w") && !ids(tabPlain).has("usda:b")); // no whole foods or plain brands in the tab
 });
-test("imported restaurant items need the full restaurant name", async () => {
+test("imported restaurant items only appear in the Restaurants tab", async () => {
   const { foods } = importRestaurantCsv("item,calories,protein,carbs,fat\nSpecial Wrap,500,30,50,20", { ...META, restaurant: "Zeta Grill" });
   await upsertFoods(foods);
   adapters.searchUsda = async () => ({ foods: [], total: 0 });
   adapters.searchOff = async () => ({ foods: [], total: 0 });
   assert.equal((await searchFoods("special wrap", "all", 1)).foods.length, 0);
-  assert.equal((await searchFoods("zeta grill special wrap", "all", 1)).foods.length, 1);
+  assert.equal((await searchFoods("zeta grill special wrap", "all", 1)).foods.length, 0);
+  assert.equal((await searchFoods("special wrap", "restaurant", 1)).foods.length, 1);
 });
