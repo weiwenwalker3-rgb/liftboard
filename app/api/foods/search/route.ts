@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   const source: SourcePick = src === "usda" || src === "off" ? src : "all";
   const page = Math.min(50, Math.max(1, parseInt(u.searchParams.get("page") || "1", 10) || 1));
   try {
-    return NextResponse.json(await searchFoods(q, source, page, 20));
+    return NextResponse.json(await searchFoods(q, source, page, 20, u.searchParams.get("packaged") === "1"));
   } catch {
     return NextResponse.json({ error: "Food search is temporarily unavailable. Try again shortly." }, { status: 502 });
   }

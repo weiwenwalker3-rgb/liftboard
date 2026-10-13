@@ -49,6 +49,7 @@ export default function FoodSearch() {
   const [draft, setDraft] = useState<MealItem[]>([]);
   const [mealName, setMealName] = useState("");
   const [showNew, setShowNew] = useState(false);
+  const [packaged, setPackaged] = useState(false);
   const ctl = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -58,12 +59,12 @@ export default function FoodSearch() {
     return () => window.removeEventListener("focus", on);
   }, []);
 
-  const run = useCallback(async (query: string, pg: number, append: boolean, source = "") => {
+  const run = useCallback(async (query: string, pg: number, append: boolean, source = "", pk = false) => {
     ctl.current?.abort();
     const c = (ctl.current = new AbortController());
     setBusy(true); setErr("");
     try {
-      const r = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}&page=${pg}${source ? "&source=" + source : ""}`, { signal: c.signal });
+      const r = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}&page=${pg}${source ? "&source=" + source : ""}${pk ? "&packaged=1" : ""}`, { signal: c.signal });
       const j: Resp = await r.json();
       if (!r.ok) throw new Error(j.error || "Search failed");
       setFoods(prev => {
@@ -83,9 +84,9 @@ export default function FoodSearch() {
     if (tab !== "search" && tab !== "restaurants") return;
     const t = q.trim();
     if (t.length < 2) { ctl.current?.abort(); setFoods([]); setNotices([]); setErr(""); setBusy(false); return; }
-    const id = setTimeout(() => run(t, 1, false, tab === "restaurants" ? "restaurant" : ""), 300);
+    const id = setTimeout(() => run(t, 1, false, tab === "restaurants" ? "restaurant" : "", packaged), 300);
     return () => clearTimeout(id);
-  }, [q, run, tab]);
+  }, [q, run, tab, packaged]);
 
   const loadList = useCallback(async (t: Tab) => {
     setErr(""); setNotices([]); setBusy(true);
@@ -164,6 +165,9 @@ export default function FoodSearch() {
           <button type="button" className="btn" onClick={scan} disabled={code.replace(/\D/g, "").length < 8 || busy}>Look up</button>
         </div>
       ) : null}
+      {tab === "search" ? (
+        <label className="fs-pk"><input type="checkbox" checked={packaged} onChange={e => setPackaged(e.target.checked)} /> Include packaged and brand-name products</label>
+      ) : null}
       {notices.map(n => <p key={n} className="hint fs-note">{n}</p>)}
       {err ? <p className="hint fs-err" role="alert">{err}</p> : null}
       {needsSignIn ? <p className="hint">Sign in on the Profile tab to keep favorites, recent foods, your own foods and saved meals.</p> : null}
@@ -240,7 +244,7 @@ export default function FoodSearch() {
           {busy ? <p className="hint">{isSearch ? "Searching…" : "Loading…"}</p> : null}
           {isSearch && !busy && q.trim().length >= 2 && !foods.length && !err ? <p className="hint">{tab === "restaurants" ? "No restaurant matches. Try the restaurant name, like chick fil a or mcdonalds." : "No matches. Try fewer words, or add a custom food below."}</p> : null}
           {!isSearch && !busy && signedIn && !foods.length && !err ? <p className="hint">Nothing here yet.</p> : null}
-          {tab === "search" && foods.length && foods.length < total && !busy ? <button type="button" className="btn" onClick={() => run(q.trim(), page + 1, true)}>Load more</button> : null}
+          {tab === "search" && foods.length && foods.length < total && !busy ? <button type="button" className="btn" onClick={() => run(q.trim(), page + 1, true, "", packaged)}>Load more</button> : null}
         </>
       )}
     </div>
@@ -321,6 +325,7 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
         </p>
       ) : <p className="hint">Enter a quantity.</p>}
       {calc?.converted && cook ? <p className="hint fs-note">Estimated: converted from {weighed} to {cook.state} weight with a typical yield (cooked is about ×{cook.yield} of raw).</p> : calc?.est ? <p className="hint fs-note">Estimated: converting between weight and volume assumes water density.</p> : null}
+      {food.quality === "complete" && food.qualityNote ? <p className="hint">{food.qualityNote}.</p> : null}
       {food.quality !== "complete" ? <p className="hint fs-note">{food.quality === "incomplete" ? "Incomplete data" : "Estimated data"}{food.qualityNote ? `: ${food.qualityNote}` : ""}. Check the label.</p> : null}
       <p className="hint">Source: {SRC[food.source]}{food.sourceUrl ? <> · <a href={food.sourceUrl} target="_blank" rel="noreferrer noopener">view record</a></> : null} · updated {food.updatedAt.slice(0, 10)}</p>
       <div className="fs-row">

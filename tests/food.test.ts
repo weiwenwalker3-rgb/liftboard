@@ -50,22 +50,25 @@ test("serving change recalculates macros", () => {
   assert.equal(two.kcal, 201);
 });
 test("search: caches, partial failure notice, total failure throws", async () => {
-  let usdaCalls = 0;
-  adapters.searchUsda = async () => { usdaCalls++; return { foods: [usda[0]], total: 1 }; };
+  let basicCalls = 0;
+  adapters.searchUsdaBasic = async () => { basicCalls++; return { foods: [usda[0]], total: 1 }; };
+  adapters.searchUsda = async () => ({ foods: [], total: 0 });
   adapters.searchOff = async () => ({ foods: [{ ...off[1], id: "off:x", name: "Chicken breast strips" }], total: 1 });
   const a = await searchFoods("Chicken  Breast", "all", 1);
-  assert.equal(a.foods.length, 2);
+  assert.equal(a.foods.length, 1); // generic ingredients only by default
   assert.equal(a.cached, false);
   const b = await searchFoods("chicken breast", "all", 1);
   assert.equal(b.cached, true);
-  assert.equal(usdaCalls, 1);
+  assert.equal(basicCalls, 1);
+  assert.equal((await searchFoods("chicken breast", "all", 1, 20, true)).foods.length, 2); // packaged on request
 
   adapters.searchOff = async () => { throw new Error("down"); };
-  const c = await searchFoods("chicken roasted", "all", 1);
+  const c = await searchFoods("chicken roasted", "all", 1, 20, true);
   assert.equal(c.foods.length, 1);
   assert.equal(c.notices.length, 1);
-  assert.equal((await searchFoods("chicken roasted", "all", 1)).cached, false); // partial results not cached
+  assert.equal((await searchFoods("chicken roasted", "all", 1, 20, true)).cached, false); // partial results not cached
 
+  adapters.searchUsdaBasic = async () => { throw new Error("down"); };
   adapters.searchUsda = async () => { throw new Error("down"); };
   await assert.rejects(searchFoods("beans", "all", 1));
 });
@@ -99,6 +102,7 @@ test("restaurant import rejects missing source or columns", () => {
 test("restaurant tab finds imported items by name or chain", async () => {
   const { foods } = importRestaurantCsv("item,calories,protein,carbs,fat\nChicken Sandwich,440,28,40,19", META);
   await upsertFoods(foods);
+  adapters.searchUsdaBasic = async () => ({ foods: [], total: 0 });
   adapters.searchUsda = async () => ({ foods: [], total: 0 });
   adapters.searchOff = async () => ({ foods: [], total: 0 });
   const r = await searchFoods("test diner sandwich", "restaurant", 1);
@@ -163,29 +167,70 @@ test("chain detection needs the whole name", () => {
   assert.ok(isChainFood({ name: "Fries", brand: "McDonald's", category: null }));
   assert.ok(!isChainFood({ name: "Potatoes, russet, raw", brand: null, category: "Vegetables" }));
 });
-test("search hides chain items outside the Restaurants tab and leads with whole foods", async () => {
+test("search shows generic ingredients; chains and packaged items stay out unless asked", async () => {
   const whole = { ...usda[0], id: "usda:w", name: "Chicken, breast, roasted", brand: null, category: "Poultry Products" };
   const chainItem = { ...usda[1], id: "usda:c", name: "CHICK-FIL-A, chicken sandwich", brand: null, category: "Fast Foods", barcode: null, kcal: 249, protein: 16, carbs: 21, fat: 11 };
   const branded = { ...usda[1], id: "usda:b", name: "Chicken breast strips", brand: "Tyson", barcode: null, kcal: 150, protein: 20, carbs: 5, fat: 5 };
   const offChain = { ...off[1], id: "off:cfa", name: "Chicken sandwich", brand: "Chick-fil-A", kcal: 300, protein: 20, carbs: 30, fat: 10 };
-  adapters.searchUsda = async () => ({ foods: [branded, chainItem, whole], total: 3 });
+  adapters.searchUsdaBasic = async () => ({ foods: [chainItem, whole], total: 2 });
+  adapters.searchUsda = async () => ({ foods: [branded], total: 1 });
   adapters.searchOff = async () => ({ foods: [offChain], total: 1 });
-  const plain = await searchFoods("chicken", "all", 1);
-  assert.deepEqual(plain.foods.map(f => f.id), ["usda:w", "usda:b"]);
-  const spelledAll = await searchFoods("chick fil a chicken", "all", 1);
-  assert.equal(spelledAll.foods.length, 0); // chain items never show outside the Restaurants tab
-  const tab = await searchFoods("chick fil a chicken", "restaurant", 1);
-  const ids = (r: { foods: { id: string }[] }) => new Set(r.foods.map(f => f.id));
-  assert.ok(ids(tab).has("usda:c") && ids(tab).has("off:cfa"));
-  const tabPlain = await searchFoods("chicken", "restaurant", 1);
-  assert.ok(!ids(tabPlain).has("usda:w") && !ids(tabPlain).has("usda:b")); // no whole foods or plain brands in the tab
+  const ids = (r: { foods: { id: string }[] }) => r.foods.map(f => f.id);
+  assert.deepEqual(ids(await searchFoods("chicken", "all", 1)), ["usda:w"]);
+  assert.deepEqual(ids(await searchFoods("chicken", "all", 1, 20, true)), ["usda:w", "usda:b"]);
+  assert.equal((await searchFoods("chick fil a chicken", "all", 1)).foods.length, 0);
+  const tab = new Set(ids(await searchFoods("chick fil a chicken", "restaurant", 1)));
+  assert.ok(tab.has("usda:c") && tab.has("off:cfa"));
+  const tabPlain = new Set(ids(await searchFoods("chicken", "restaurant", 1)));
+  assert.ok(!tabPlain.has("usda:w") && !tabPlain.has("usda:b"));
+});
+test("no generic match falls back to packaged products", async () => {
+  const bar = { ...usda[1], id: "usda:bar", name: "Peanut Butter Bar", brand: "Kind", barcode: null };
+  adapters.searchUsdaBasic = async () => ({ foods: [], total: 0 });
+  adapters.searchUsda = async () => ({ foods: [bar], total: 1 });
+  adapters.searchOff = async () => ({ foods: [], total: 0 });
+  assert.deepEqual((await searchFoods("peanut butter bar", "all", 1)).foods.map(f => f.id), ["usda:bar"]);
 });
 test("imported restaurant items only appear in the Restaurants tab", async () => {
   const { foods } = importRestaurantCsv("item,calories,protein,carbs,fat\nSpecial Wrap,500,30,50,20", { ...META, restaurant: "Zeta Grill" });
   await upsertFoods(foods);
+  adapters.searchUsdaBasic = async () => ({ foods: [], total: 0 });
   adapters.searchUsda = async () => ({ foods: [], total: 0 });
   adapters.searchOff = async () => ({ foods: [], total: 0 });
   assert.equal((await searchFoods("special wrap", "all", 1)).foods.length, 0);
   assert.equal((await searchFoods("zeta grill special wrap", "all", 1)).foods.length, 0);
   assert.equal((await searchFoods("special wrap", "restaurant", 1)).foods.length, 1);
+});
+
+import { generalize, isPrepared } from "../lib/food/generic";
+import type { Food } from "../lib/food/model";
+const sr = (name: string, kcal: number, extra: Partial<Food> = {}): Food => ({ ...usda[0], id: "usda:" + name, name, brand: null, kcal, protein: 1, carbs: 3, fat: 0.2, servings: [], nutrients: {}, ...extra });
+test("generalize: lettuce variants become one entry, medleys dropped", () => {
+  const list = [
+    sr("Lettuce, cos or romaine, raw", 17), sr("Lettuce, butterhead (includes boston and bibb types), raw", 13),
+    sr("Lettuce, iceberg (includes crisphead types), raw", 14), sr("Lettuce, green leaf, raw", 15),
+    sr("Butter Lettuce & Red Leaf Lettuce Blend, Butter Lettuce", 15), sr("Romaine Lettuce, Green & Red Leaf Lettuce Medley", 15),
+    sr("Lettuce, raw, shredded kit", 15),
+  ];
+  const g = generalize(list, "lettuce");
+  assert.equal(g.length, 1);
+  assert.equal(g[0].name, "Lettuce, raw");
+  assert.equal(g[0].kcal, 14.75);
+  assert.match(g[0].qualityNote!, /Average of 4/);
+});
+test("generalize: keeps meaningful subtypes and states apart", () => {
+  const list = [
+    sr("Chicken, broilers or fryers, breast, meat only, raw", 120), sr("Chicken, roasting, breast, meat only, raw", 110),
+    sr("Chicken, broilers or fryers, breast, meat only, cooked, roasted", 165), sr("Chicken, broilers or fryers, thigh, meat only, raw", 121),
+  ];
+  const g = generalize(list, "chicken breast");
+  const names = g.map(f => f.name);
+  assert.ok(names.includes("Chicken, breast, raw"));
+  assert.ok(names.some(n => /roasted|cooked/.test(n)));
+  assert.ok(!names.some(n => /thigh/.test(n)));
+});
+test("isPrepared respects what was typed", () => {
+  assert.ok(isPrepared("Lettuce Medley", "lettuce"));
+  assert.ok(!isPrepared("Lettuce Medley", "lettuce medley"));
+  assert.ok(isPrepared("Chicken breast tenders, breaded", "chicken breast"));
 });

@@ -2,7 +2,8 @@
 import { type Food, dedupeKey, dupKeys, matchesQuery } from "./model";
 import { foodReady, foodSql } from "./db";
 import { isChainFood } from "./chains";
-import { searchUsda, usdaByBarcode, UpstreamError } from "./usda";
+import { searchUsda, searchUsdaBasic, usdaByBarcode, UpstreamError } from "./usda";
+import { generalize, isPrepared } from "./generic";
 import { searchOff, offByBarcode } from "./off";
 
 const TTL_MS = 24 * 3600 * 1000;
@@ -95,7 +96,7 @@ async function writeCache(key: string, ids: string[], total: number) {
 }
 
 type Searcher = (q: string, page: number, size: number) => Promise<{ foods: Food[]; total: number }>;
-export const adapters: { searchUsda: Searcher; searchOff: Searcher } = { searchUsda, searchOff };
+export const adapters: { searchUsda: Searcher; searchOff: Searcher; searchUsdaBasic: (q: string) => Promise<{ foods: Food[]; total: number }> } = { searchUsda, searchOff, searchUsdaBasic };
 
 async function searchRestaurants(q: string, limit: number): Promise<Food[]> {
   const words = q.split(" ").filter(w => w.length > 1).slice(0, 5);
@@ -107,42 +108,58 @@ async function searchRestaurants(q: string, limit: number): Promise<Food[]> {
   return rows.map(fromRow);
 }
 
-export async function searchFoods(q: string, source: SourcePick, page: number, pageSize = 20): Promise<SearchResult> {
+/**
+ * Search tab: generic ingredients only ("Lettuce, raw"), no blends or prepared dishes, no brands, no restaurants.
+ * Packaged products are added when asked for (`packaged`) or when no generic ingredient matches.
+ * Restaurants tab: chain items only.
+ */
+export async function searchFoods(q: string, source: SourcePick, page: number, pageSize = 20, packaged = false): Promise<SearchResult> {
   const nq = normQuery(q);
-  const key = `${nq}|${source}|${page}|${pageSize}`;
+  const restaurantTab = source === "restaurant";
+  const key = `${nq}|${source}|${page}|${pageSize}|${packaged ? "p" : "g"}`;
   const hit = await readCache(key).catch(() => null);
   if (hit) {
     const foods = await getFoods(hit.ids);
     if (foods.length === hit.ids.length) return { foods, total: hit.total, page, notices: [], cached: true };
   }
   const notices: string[] = [];
-  const jobs: [string, Promise<{ foods: Food[]; total: number }>][] = [];
-  if (source !== "off") jobs.push(["USDA FoodData Central", adapters.searchUsda(nq, page, pageSize)]);
-  if (source !== "usda") jobs.push(["Open Food Facts", adapters.searchOff(nq, page, pageSize)]);
-  const settled = await Promise.allSettled(jobs.map(j => j[1]));
-  const lists: Food[][] = [];
-  // Restaurant items (imported menus and chain-branded foods) belong to the Restaurants tab and never appear in the other searches.
-  const restaurantTab = source === "restaurant";
+  const note = (name: string, e: unknown) => notices.push(`${name} is unavailable${(e as UpstreamError)?.status === 429 ? " (rate limited)" : ""}; showing results from the other sources.`);
   const local = restaurantTab && page === 1 ? await searchRestaurants(nq, pageSize).catch(() => []) : [];
-  let total = 0;
-  settled.forEach((s, i) => {
-    if (s.status === "fulfilled") { lists.push(s.value.foods); total += s.value.total; }
-    else {
-      const e = s.reason as UpstreamError;
-      notices.push(`${jobs[i][0]} is unavailable${e?.status === 429 ? " (rate limited)" : ""}; showing results from the other sources.`);
-    }
-  });
-  const relevant = lists.map(l => l.filter(f => matchesQuery(f, nq) && (restaurantTab ? isChainFood(f) : !isChainFood(f))));
-  // Whole foods and plain ingredients (USDA entries without a brand) lead; branded and packaged items follow.
-  const whole = relevant.flatMap(l => l.filter(f => f.source === "usda" && !f.brand));
-  const rest = relevant.map(l => l.filter(f => !(f.source === "usda" && !f.brand)));
-  const foods = mergeResults([[...local, ...whole, ...mergeResults(rest)]]);
-  if (settled.some(s => s.status === "fulfilled")) {
-    await upsertFoods(foods.filter(f => f.source !== "restaurant")).catch(() => {});
-    // Only cache when every requested source answered, so a transient failure is not pinned for 24 h.
-    if (!notices.length) await writeCache(key, foods.map(f => f.id), total).catch(() => {});
+
+  // Plain ingredients (first page only).
+  let generic: Food[] = [];
+  let basicRaw: Food[] = [];
+  let answered = 0, asked = 0;
+  if (page === 1 && source !== "off") {
+    asked++;
+    try { basicRaw = (await adapters.searchUsdaBasic(nq)).foods; answered++; } catch (e) { note("USDA FoodData Central", e); }
+    const rel = basicRaw.filter(f => matchesQuery(f, nq));
+    generic = restaurantTab ? [] : generalize(rel.filter(f => !isChainFood(f)), nq);
   }
-  if (!lists.length) throw new UpstreamError("all", "All food sources are unavailable");
+
+  // Packaged and branded products: on request, when nothing generic matched, or in the Restaurants tab.
+  let extra: Food[] = [];
+  let total = generic.length;
+  if (restaurantTab || packaged || (generic.length === 0 && source !== "usda") || (generic.length === 0 && page > 1)) {
+    const jobs: [string, Promise<{ foods: Food[]; total: number }>][] = [];
+    if (source !== "off") jobs.push(["USDA FoodData Central", adapters.searchUsda(nq, page, pageSize)]);
+    if (source !== "usda") jobs.push(["Open Food Facts", adapters.searchOff(nq, page, pageSize)]);
+    asked += jobs.length;
+    const settled = await Promise.allSettled(jobs.map(j => j[1]));
+    const lists: Food[][] = [];
+    settled.forEach((s, i) => {
+      if (s.status === "fulfilled") { answered++; lists.push(s.value.foods); total += s.value.total; } else note(jobs[i][0], s.reason);
+    });
+    if (restaurantTab) lists.push(basicRaw);
+    const keep = (f: Food) => matchesQuery(f, nq) && (restaurantTab ? isChainFood(f) : !isChainFood(f) && !isPrepared(f.name, nq));
+    extra = mergeResults(lists.map(l => l.filter(keep)));
+  }
+  if (asked && !answered) throw new UpstreamError("all", "All food sources are unavailable");
+
+  const foods = mergeResults([[...local, ...generic, ...extra]]);
+  await upsertFoods(foods.filter(f => f.source !== "restaurant")).catch(() => {});
+  // Only cache when every requested source answered, so a transient failure is not pinned for 24 h.
+  if (!notices.length) await writeCache(key, foods.map(f => f.id), total).catch(() => {});
   return { foods, total, page, notices, cached: false };
 }
 

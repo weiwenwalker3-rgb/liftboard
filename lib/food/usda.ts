@@ -87,8 +87,6 @@ export async function fetchJson(source: string, url: string, init: RequestInit =
   throw last instanceof UpstreamError ? last : new UpstreamError(source, "request failed");
 }
 
-const SHORT = 8; // slots on page 1 reserved for basic ingredients
-
 async function usdaPage(q: string, types: string, page: number, pageSize: number) {
   const key = process.env.USDA_API_KEY || "DEMO_KEY";
   const url = `${BASE}/foods/search?query=${encodeURIComponent(q)}&pageNumber=${page}&pageSize=${pageSize}&requireAllWords=true` +
@@ -97,15 +95,11 @@ async function usdaPage(q: string, types: string, page: number, pageSize: number
   return { foods: (j.foods || []).map(normalizeUsda).filter((x): x is Food => !!x), total: j.totalHits || 0 };
 }
 
-/** Page 1 leads with basic ingredients (Foundation, SR Legacy), then branded products. Later pages are branded only. */
-export async function searchUsda(q: string, page: number, pageSize: number): Promise<{ foods: Food[]; total: number }> {
-  if (page > 1) return usdaPage(q, "Branded", page, pageSize);
-  const [basic, branded] = await Promise.allSettled([usdaPage(q, "Foundation,SR Legacy", 1, SHORT), usdaPage(q, "Branded", 1, pageSize - SHORT)]);
-  if (branded.status === "rejected" && basic.status === "rejected") throw branded.reason;
-  const b = basic.status === "fulfilled" ? basic.value : { foods: [], total: 0 };
-  const r = branded.status === "fulfilled" ? branded.value : { foods: [], total: 0 };
-  return { foods: [...b.foods, ...r.foods], total: b.total + r.total };
-}
+/** Plain ingredients (Foundation, SR Legacy). One wide page; the caller generalizes and ranks them. */
+export const searchUsdaBasic = (q: string) => usdaPage(q, "Foundation,SR Legacy", 1, 50);
+
+/** Packaged products (Branded). */
+export const searchUsda = (q: string, page: number, pageSize: number) => usdaPage(q, "Branded", page, pageSize);
 
 export async function usdaByBarcode(code: string): Promise<Food | null> {
   const r = await searchUsda(code, 1, 5);
