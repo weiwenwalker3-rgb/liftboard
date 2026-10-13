@@ -811,3 +811,32 @@ details.lranks[open] .chev{transform:rotate(90deg)}
   .hright{gap:6px}
   .chip-me{gap:6px;padding-right:9px}
 }
+
+/* Food search */
+.fs-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fs input,.fs select{background:var(--surface-2);border:2px solid transparent;border-radius:10px;padding:9px 11px;min-width:0}
+.fs input:focus,.fs select:focus{border-color:var(--gold);outline:none}
+.fs-q{flex:1 1 220px}.fs-code{width:120px}
+.fs-list{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+.fs-list button{width:100%;text-align:left;display:grid;gap:2px;background:var(--surface-2);border:0;border-radius:10px;padding:9px 11px;color:inherit;font:inherit;cursor:pointer}
+.fs-list button:hover,.fs-list button:focus-visible{outline:2px solid var(--gold)}
+.fs-name em,.fs-det h4 em{font-style:normal;color:var(--muted);font-weight:400}
+.fs-meta{font-size:12.5px;color:var(--muted)}
+.fs-badges b{font-size:11px;font-weight:600;margin-right:6px;padding:1px 6px;border-radius:6px;background:var(--surface);color:var(--muted)}
+.fs-badges b.warn,.warnt{color:#e0a030}
+.fs-note{color:#e0a030}.fs-err{color:#e5484d}
+.fs-det{display:grid;gap:8px;margin-top:10px}
+.fs-det h4{margin:0;font-size:16px}
+.fs-det input{width:90px}.fs-det select{flex:1 1 160px}
+.fs-macros{margin:0}
+.fs-custom{margin-top:12px}.fs-custom summary{cursor:pointer;color:var(--muted)}
+.fsub{font-size:12px;color:var(--muted)}
+.fs-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.fs-tabs button{background:var(--surface-2);border:0;border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}
+.fs-tabs button[aria-selected=true]{background:var(--gold);color:#1b1230;font-weight:600}
+.fs-star{background:none;border:0;font-size:20px;color:var(--gold);cursor:pointer;margin-left:6px}
+.fs-draft{background:var(--surface-2);border-radius:12px;padding:10px 12px;margin:10px 0;display:grid;gap:8px}
+.fs-draft ul{margin:0;padding-left:18px;font-size:13px}.fs-draft li{margin:2px 0}
+.fs-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
+.fs-meal{display:grid;gap:4px;background:var(--surface-2);border-radius:10px;padding:9px 11px}
+.fs-actions{display:flex;gap:6px;flex-wrap:wrap}

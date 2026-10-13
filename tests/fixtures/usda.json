@@ -1,0 +1,8 @@
+{"totalHits":3,"foods":[
+{"fdcId":171077,"description":"Chicken, broilers or fryers, breast, meat only, cooked, roasted","dataType":"SR Legacy","foodCategory":"Poultry Products",
+ "foodNutrients":[{"nutrientNumber":"208","value":165},{"nutrientNumber":"203","value":31},{"nutrientNumber":"205","value":0},{"nutrientNumber":"204","value":3.6},{"nutrientNumber":"307","value":74}],
+ "foodPortions":[{"gramWeight":172,"amount":1,"modifier":"breast, bone and skin removed"}]},
+{"fdcId":2001,"description":"GREEK YOGURT","dataType":"Branded","brandOwner":"FAGE USA","gtinUpc":"0689544080064","servingSize":170,"servingSizeUnit":"g","householdServingFullText":"3/4 cup",
+ "foodNutrients":[{"nutrientNumber":"208","value":59},{"nutrientNumber":"203","value":10.3},{"nutrientNumber":"205","value":3.6},{"nutrientNumber":"204","value":0.4}]},
+{"fdcId":2002,"description":"MYSTERY BAR","dataType":"Branded","foodNutrients":[{"nutrientNumber":"208","value":400}]}
+]}

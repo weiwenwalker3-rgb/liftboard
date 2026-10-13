@@ -1438,7 +1438,7 @@ function renderFuel(){
   const bar = (label,a,b,u) => { const pct = b ? a/b*100 : 0; return `<div class="mb"><div class="top"><span>${label}</span><span>${fmt(a)} / ${fmt(b)} ${u}</span></div><div class="track"><div class="fill ${pct>110?"over":""}" style="width:${Math.min(100,pct)}%"></div></div></div>`; };
   $("bars").innerHTML = bar("Calories",t.k,g.k,"kcal") + bar("Protein",t.p,g.p,"g") + bar("Carbs",t.c,g.c,"g") + bar("Fat",t.f,g.f,"g");
   const rows = state.foods.filter(f => f.date === today());
-  $("foodToday").innerHTML = rows.map(f => `<tr><td>${esc(f.name)}</td><td class="r mono">${f.p}</td><td class="r mono">${f.c}</td><td class="r mono">${f.f}</td><td class="r mono">${fmt(f.p*4+f.c*4+f.f*9)}</td><td class="r"><button class="x" type="button" data-del-food="${esc(f.id)}" aria-label="Delete entry">✕</button></td></tr>`).join("")
+  $("foodToday").innerHTML = rows.map(f => `<tr><td>${esc(f.name)}${f.qty ? `<div class="fsub">${esc(f.qty)} × ${esc(f.unit)}${f.q && f.q !== "complete" ? ` · <span class="warnt">${esc(f.q)}</span>` : ""}</div>` : ""}</td><td class="r mono">${f.p}</td><td class="r mono">${f.c}</td><td class="r mono">${f.f}</td><td class="r mono">${fmt(f.p*4+f.c*4+f.f*9)}</td><td class="r"><button class="x" type="button" data-del-food="${esc(f.id)}" aria-label="Delete entry">✕</button></td></tr>`).join("")
     || `<tr><td colspan="6" class="muted">Nothing logged yet today.</td></tr>`;
   const a7 = adherence(7), a30 = adherence(30);
   $("g7").textContent = grade(a7.score); $("s7").textContent = a7.score + " / 100";
@@ -1572,6 +1572,7 @@ $("liftForm").addEventListener("submit", e => {
 $("recent").addEventListener("click", e => { const b = e.target.closest("[data-del-lift]"); if (b){ state.lifts = state.lifts.filter(l => l.id !== b.dataset.delLift); commit("Set deleted"); } });
 ["ffP","ffC","ffF"].forEach(id => $(id).addEventListener("input", updateCal));
 $("foodForm").addEventListener("submit", e => { e.preventDefault(); state.foods.push({id:uid8(), date:today(), name:$("ffN").value.trim() || "Food", p:num($("ffP").value), c:num($("ffC").value), f:num($("ffF").value)}); $("ffN").value = ""; commit("Added to today"); });
+window.addEventListener("lb:addfood", e => { const d = e.detail || {}; const m = d.meta || {}; state.foods.push({id:uid8(), date:today(), name:String(d.name||"Food").slice(0,80), p:num(d.p), c:num(d.c), f:num(d.f), src:m.src, fid:m.fid, qty:m.qty, unit:m.unit, g:m.grams, q:m.q}); commit("Added to today"); });
 $("foodToday").addEventListener("click", e => { const b = e.target.closest("[data-del-food]"); if (b){ state.foods = state.foods.filter(f => f.id !== b.dataset.delFood); commit("Entry deleted"); } });
 $("goalForm").addEventListener("submit", e => { e.preventDefault(); state.goals = {k:num($("gK").value), p:num($("gP").value), c:num($("gC").value), f:num($("gF").value)}; commit("Targets saved"); });
 $("profForm").addEventListener("submit", async e => {

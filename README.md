@@ -29,6 +29,19 @@ With no `DATABASE_URL`, data is held in server memory (lost on restart), which i
 4. Add an environment variable `AUTH_SECRET` with a long random string (`openssl rand -base64 32`).
 5. Redeploy so the new variables apply, then create an account on the Profile tab.
 
+## Food search and nutrition
+
+The Fuel tab searches foods instead of asking for typed macros. Search goes through server routes (`/api/foods/*`), so keys stay on the server.
+
+- **Sources:** USDA FoodData Central (basic ingredients and branded foods), Open Food Facts (packaged foods and barcodes), restaurant items you import, and your own foods.
+- **Normalized model:** `lib/food/model.ts`. Nutrients are stored per 100 g (or ml) with serving sizes on top; `lib/food/units.ts` converts units and scales nutrients. Weight-to-volume conversions without a known density are flagged as estimated.
+- **Quality flags:** records with missing macros or calories that disagree with the macros show as "incomplete"; each result links to its source record.
+- **Caching:** merged search results are cached 24 h in Postgres (`lb_food_cache`), requests are debounced and paged, and a failing source shows a notice without breaking results.
+- **Accounts:** favorites, recents, your own foods and saved meals live in Postgres (`lb_food_*`, `lb_meals`) and need sign-in. Logged foods are written to the same daily log as before, so totals, macro scores and streaks are unchanged. Each logged entry keeps a nutrient snapshot.
+- **Env:** set `USDA_API_KEY` (free at api.data.gov). Without it the rate-limited `DEMO_KEY` is used.
+- **Restaurants:** import a chain's own published nutrition table: `DATABASE_URL=... npx tsx scripts/import-restaurant.ts --restaurant "Name" --url https://page-it-came-from --published YYYY-MM-DD menu.csv` (columns in `docs/restaurant-template.csv`). Each item keeps its source URL and publish date. No restaurant data is bundled.
+- **Tests:** `npm test` (unit conversions, adapters against recorded-shape fixtures, caching, partial failure, user data, restaurant import).
+
 ## Phone app
 
 The site has a web manifest, so "Add to Home Screen" installs it as an app on iOS and Android. A store-listed native app would be a separate wrapper (Capacitor or similar) around this same site.
