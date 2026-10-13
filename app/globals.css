@@ -794,7 +794,8 @@ details.lranks[open] .chev{transform:rotate(90deg)}
 .witem .wrow{flex:1;min-width:0}
 .witem .grip{flex:none;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;padding:12px 8px;color:var(--muted);font-size:16px;line-height:1;letter-spacing:-2px;border-radius:8px}
 .witem .grip:hover,.witem .grip:focus-visible{color:var(--fg);background:var(--surface-2)}
-.witem.dragging{background:var(--surface-2);box-shadow:var(--shadow);position:relative;z-index:2}
+.witem{will-change:auto}
+.witem.dragging{background:var(--surface-2);box-shadow:0 10px 28px rgba(0,0,0,.28);position:relative;z-index:2;will-change:transform;transform-origin:center}
 .witem.dragging .grip{cursor:grabbing}
 .wmore{display:block;width:100%;margin-top:6px;padding:9px;border:0;border-radius:10px;background:var(--surface-2);color:var(--muted);font-weight:600;font-size:13.5px;cursor:pointer}
 .wmore:hover{color:var(--fg)}

@@ -1207,24 +1207,60 @@ function renderTrain(){
   drawTrainCharts();
 }
 
+// Smooth reorder: the dragged row follows the pointer; the others slide into place (FLIP).
+function flipItems(skip, mutate){
+  const items = [...$("watch").querySelectorAll(".witem")].filter(x => x !== skip);
+  const first = new Map(items.map(it => [it, it.getBoundingClientRect().top]));
+  mutate();
+  if (reduceMotion()) return;
+  items.forEach(it => {
+    const dy = first.get(it) - it.getBoundingClientRect().top; if (!dy) return;
+    it.style.transition = "none"; it.style.transform = `translateY(${dy}px)`;
+  });
+  void $("watch").offsetHeight;
+  items.forEach(it => {
+    if (!it.style.transform) return;
+    it.style.transition = "transform .2s cubic-bezier(.2,.8,.2,1)"; it.style.transform = "";
+    it.addEventListener("transitionend", () => { it.style.transition = ""; }, {once:true});
+  });
+}
 let wdrag = null;
 $("watch").addEventListener("pointerdown", e => {
   const g = e.target.closest(".grip"); if (!g) return;
   e.preventDefault();
   $("watch").setPointerCapture(e.pointerId);
-  wdrag = {item:g.closest(".witem"), id:e.pointerId, moved:false};
-  wdrag.item.classList.add("dragging");
+  const item = g.closest(".witem"), r = item.getBoundingClientRect();
+  wdrag = {item, id:e.pointerId, moved:false, grab:e.clientY - r.top, y:e.clientY, raf:0};
+  item.classList.add("dragging");
+  item.style.transition = "none";
 });
+function wdragFrame(){
+  const d = wdrag; if (!d) return; d.raf = 0;
+  const box = $("watch"), item = d.item, want = d.y - d.grab;
+  item.style.transform = "";
+  // Compare in layout coordinates so rows that are mid-slide do not confuse the hit test.
+  const midOff = item.offsetTop + (want - item.getBoundingClientRect().top) + item.offsetHeight / 2;
+  const others = [...box.querySelectorAll(".witem")].filter(x => x !== item);
+  const before = others.find(it => midOff < it.offsetTop + it.offsetHeight / 2) || null;
+  const n = item.nextElementSibling, nextItem = n && n.classList.contains("witem") ? n : null;
+  if (before !== nextItem) flipItems(item, () => box.insertBefore(item, before || $("watchMore")));
+  item.style.transform = `translateY(${want - item.getBoundingClientRect().top}px) scale(1.02)`;
+}
 $("watch").addEventListener("pointermove", e => {
   if (!wdrag || e.pointerId !== wdrag.id) return;
-  wdrag.moved = true;
-  const box = $("watch"), others = [...box.querySelectorAll(".witem")].filter(x => x !== wdrag.item);
-  const before = others.find(it => { const r = it.getBoundingClientRect(); return e.clientY < r.top + r.height/2; }) || null;
-  if (before !== wdrag.item.nextElementSibling && !(before === null && wdrag.item.nextElementSibling === $("watchMore"))) box.insertBefore(wdrag.item, before || $("watchMore"));
+  wdrag.moved = true; wdrag.y = e.clientY;
+  if (!wdrag.raf) wdrag.raf = requestAnimationFrame(wdragFrame);
 });
 const wdragEnd = e => {
   if (!wdrag || e.pointerId !== wdrag.id) return;
-  const d = wdrag; wdrag = null; d.item.classList.remove("dragging");
+  const d = wdrag; wdrag = null; if (d.raf) cancelAnimationFrame(d.raf);
+  const item = d.item;
+  if (d.moved && !reduceMotion()){
+    item.style.transition = "transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s";
+    item.style.transform = "";
+    const done = () => { item.style.transition = ""; item.classList.remove("dragging"); };
+    item.addEventListener("transitionend", done, {once:true}); setTimeout(done, 260);
+  } else { item.style.transition = ""; item.style.transform = ""; item.classList.remove("dragging"); }
   if (d.moved) saveWatchOrder();
 };
 $("watch").addEventListener("pointerup", wdragEnd);
@@ -1234,7 +1270,7 @@ $("watch").addEventListener("keydown", e => {
   e.preventDefault();
   const item = g.closest(".witem"), up = e.key === "ArrowUp", sib = up ? item.previousElementSibling : item.nextElementSibling;
   if (!sib || !sib.classList.contains("witem")) return;
-  $("watch").insertBefore(item, up ? sib : sib.nextElementSibling);
+  flipItems(null, () => $("watch").insertBefore(item, up ? sib : sib.nextElementSibling));
   saveWatchOrder();
   item.querySelector(".grip").focus();
 });
