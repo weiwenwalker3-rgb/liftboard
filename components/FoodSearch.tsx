@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Food } from "@/lib/food/model";
 import type { Meal, MealItem } from "@/lib/food/user";
 import { scale, toBase, type Unit } from "@/lib/food/units";
+import { dupKeys } from "@/lib/food/model";
+import { cookInfo, ownStateGrams, type CookState } from "@/lib/food/yield";
 
 type Tab = "search" | "restaurants" | "favorites" | "recents" | "foods" | "meals";
 const TABS: [Tab, string][] = [["search", "Search"], ["restaurants", "Restaurants"], ["favorites", "Favorites"], ["recents", "Recent"], ["foods", "My foods"], ["meals", "Meals"]];
@@ -64,7 +66,11 @@ export default function FoodSearch() {
       const r = await fetch(`/api/foods/search?q=${encodeURIComponent(query)}&page=${pg}${source ? "&source=" + source : ""}`, { signal: c.signal });
       const j: Resp = await r.json();
       if (!r.ok) throw new Error(j.error || "Search failed");
-      setFoods(prev => (append ? [...prev, ...j.foods.filter(f => !prev.some(p => p.id === f.id))] : j.foods));
+      setFoods(prev => {
+        if (!append) return j.foods;
+        const seen = new Set(prev.flatMap(dupKeys));
+        return [...prev, ...j.foods.filter(f => !dupKeys(f).some(k => seen.has(k)))];
+      });
       setTotal(j.total); setPage(pg); setNotices(j.notices || []);
     } catch (e) {
       if ((e as Error).name === "AbortError") return;
@@ -243,10 +249,14 @@ export default function FoodSearch() {
 
 function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { food: Food; fav: boolean; signedIn: boolean; onFav: () => void; onClose: () => void; onLogged: () => void; onMeal: (i: MealItem) => void }) {
   const units = food.base === "ml" ? UNITS_ML : UNITS_G;
-  const [amount, setAmount] = useState("1");
+  const cook = useMemo(() => cookInfo(food), [food]);
   const first = defaultServing(food);
-  const [unit, setUnit] = useState<string>(first ? "s0" : food.base === "ml" ? "ml" : "g");
-  useEffect(() => { if (!first) setAmount("100"); }, [first]);
+  // Simple ingredients default to grams so the raw/cooked switch is available straight away.
+  const startInGrams = !first || (!!cook && food.base === "g");
+  const [amount, setAmount] = useState(startInGrams ? "100" : "1");
+  const [unit, setUnit] = useState<string>(!startInGrams ? "s0" : food.base === "ml" ? "ml" : "g");
+  const [weighed, setWeighed] = useState<CookState>(cook?.state ?? "raw");
+  const byWeight = unit === "g" || unit === "oz";
 
   const calc = useMemo(() => {
     const a = parseFloat(amount);
@@ -256,14 +266,18 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
       const base = toBase(idx >= 0
         ? { amount: a, unit: "serving", base: food.base, serving: { grams: food.servings[idx].grams } }
         : { amount: a, unit: unit as Unit, base: food.base });
-      return { m: scale(food, base.value), est: base.estimated, grams: base.value };
+      if (cook && byWeight && weighed !== cook.state && food.base === "g") {
+        const o = ownStateGrams(base.value, weighed, cook);
+        return { m: scale(food, o.grams), est: true, grams: base.value, converted: true };
+      }
+      return { m: scale(food, base.value), est: base.estimated, grams: base.value, converted: false };
     } catch { return null; }
-  }, [amount, unit, food]);
+  }, [amount, unit, food, cook, weighed, byWeight]);
 
   function add() {
     if (!calc) return;
     const idx = unit.startsWith("s") ? parseInt(unit.slice(1), 10) : -1;
-    const label = idx >= 0 ? food.servings[idx].label : unit;
+    const label = idx >= 0 ? food.servings[idx].label : cook && byWeight ? `${unit} ${weighed === "raw" ? "raw" : "cooked"}` : unit;
     window.dispatchEvent(new CustomEvent("lb:addfood", {
       detail: {
         name: food.brand ? `${food.name} (${food.brand})` : food.name,
@@ -278,7 +292,7 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
   function addToMeal() {
     if (!calc) return;
     const idx = unit.startsWith("s") ? parseInt(unit.slice(1), 10) : -1;
-    const label = `${amount} × ${idx >= 0 ? food.servings[idx].label : unit}`;
+    const label = `${amount} × ${idx >= 0 ? food.servings[idx].label : cook && byWeight ? `${unit} ${weighed === "raw" ? "raw" : "cooked"}` : unit}`;
     onMeal({ foodId: food.id, name: food.name, label, grams: Math.round(calc.grams * 10) / 10, kcal: calc.m.kcal, p: calc.m.protein, c: calc.m.carbs, f: calc.m.fat });
   }
 
@@ -293,12 +307,20 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
           {units.map(u => <option key={u.v} value={u.v}>{u.l}</option>)}
         </select>
       </div>
+      {cook ? (
+        <div className="fs-row fs-cook" role="group" aria-label="Weigh as">
+          <span className="hint">Weigh it</span>
+          <button type="button" aria-pressed={weighed === "raw"} disabled={!byWeight} onClick={() => setWeighed("raw")}>Raw / dry</button>
+          <button type="button" aria-pressed={weighed === "cooked"} disabled={!byWeight} onClick={() => setWeighed("cooked")}>Cooked</button>
+          {!byWeight ? <span className="hint">Pick g or oz to switch</span> : null}
+        </div>
+      ) : null}
       {calc ? (
         <p className="fs-macros"><b>{calc.m.kcal}</b> kcal · P {calc.m.protein} g · C {calc.m.carbs} g · F {calc.m.fat} g
           {Object.entries(calc.m.nutrients).length ? <span className="hint"> · {Object.entries(calc.m.nutrients).map(([k, v]) => `${k} ${v}`).join(", ")}</span> : null}
         </p>
       ) : <p className="hint">Enter a quantity.</p>}
-      {calc?.est ? <p className="hint fs-note">Estimated: converting between weight and volume assumes water density.</p> : null}
+      {calc?.converted && cook ? <p className="hint fs-note">Estimated: converted from {weighed} to {cook.state} weight with a typical yield (cooked is about ×{cook.yield} of raw).</p> : calc?.est ? <p className="hint fs-note">Estimated: converting between weight and volume assumes water density.</p> : null}
       {food.quality !== "complete" ? <p className="hint fs-note">{food.quality === "incomplete" ? "Incomplete data" : "Estimated data"}{food.qualityNote ? `: ${food.qualityNote}` : ""}. Check the label.</p> : null}
       <p className="hint">Source: {SRC[food.source]}{food.sourceUrl ? <> · <a href={food.sourceUrl} target="_blank" rel="noreferrer noopener">view record</a></> : null} · updated {food.updatedAt.slice(0, 10)}</p>
       <div className="fs-row">

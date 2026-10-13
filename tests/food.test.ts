@@ -52,7 +52,7 @@ test("serving change recalculates macros", () => {
 test("search: caches, partial failure notice, total failure throws", async () => {
   let usdaCalls = 0;
   adapters.searchUsda = async () => { usdaCalls++; return { foods: [usda[0]], total: 1 }; };
-  adapters.searchOff = async () => ({ foods: [off[1]], total: 1 });
+  adapters.searchOff = async () => ({ foods: [{ ...off[1], id: "off:x", name: "Chicken breast strips" }], total: 1 });
   const a = await searchFoods("Chicken  Breast", "all", 1);
   assert.equal(a.foods.length, 2);
   assert.equal(a.cached, false);
@@ -61,10 +61,10 @@ test("search: caches, partial failure notice, total failure throws", async () =>
   assert.equal(usdaCalls, 1);
 
   adapters.searchOff = async () => { throw new Error("down"); };
-  const c = await searchFoods("rice", "all", 1);
+  const c = await searchFoods("chicken roasted", "all", 1);
   assert.equal(c.foods.length, 1);
   assert.equal(c.notices.length, 1);
-  assert.equal((await searchFoods("rice", "all", 1)).cached, false); // partial results not cached
+  assert.equal((await searchFoods("chicken roasted", "all", 1)).cached, false); // partial results not cached
 
   adapters.searchUsda = async () => { throw new Error("down"); };
   await assert.rejects(searchFoods("beans", "all", 1));
@@ -103,4 +103,43 @@ test("restaurant items are found by name or chain and not hit upstream when sour
   assert.equal(r.foods.length, 1);
   assert.equal((await searchFoods("chicken", "restaurant", 1)).foods.length, 1);
   assert.equal((await searchFoods("pizza", "restaurant", 1)).foods.length, 0);
+});
+
+import { cookInfo, ownStateGrams } from "../lib/food/yield";
+import { matchesQuery, dupKeys } from "../lib/food/model";
+import { cleanLabel } from "../lib/food/usda";
+const mk = (name: string, source: "usda" | "off" = "usda") => ({ name, source, category: null, nutrients: {} });
+test("cookInfo detects state and skips prepared foods", () => {
+  assert.equal(cookInfo(mk("Rice, white, long-grain, cooked"))!.state, "cooked");
+  assert.equal(cookInfo(mk("Rice, white, long-grain, raw"))!.state, "raw");
+  assert.equal(cookInfo(mk("Organic Jasmine Rice"))!.state, "raw");
+  assert.equal(cookInfo(mk("Beef, ground, 93% lean meat / 7% fat, raw"))!.state, "raw");
+  assert.equal(cookInfo(mk("Chicken, broilers or fryers, breast, meat only, cooked, roasted"))!.state, "cooked");
+  assert.equal(cookInfo(mk("Chicken breast tenders, breaded, uncooked")), null);
+  assert.equal(cookInfo(mk("Chicken Breast")), null); // state unknown for meat
+  assert.equal(cookInfo(mk("Chicken fried rice, cooked")), null);
+});
+test("raw/cooked weight conversion", () => {
+  const rice = cookInfo(mk("Rice, white, raw"))!;
+  assert.equal(ownStateGrams(100, "raw", rice).grams, 100);
+  assert.ok(Math.abs(ownStateGrams(280, "cooked", rice).grams - 100) < 1e-9); // 280 g cooked = 100 g dry
+  const chicken = cookInfo(mk("Chicken breast, cooked, roasted"))!;
+  assert.equal(ownStateGrams(100, "raw", chicken).grams, 75); // 100 g raw = 75 g cooked
+});
+test("query relevance filters unrelated words and handles plurals", () => {
+  assert.ok(!matchesQuery({ name: "Chick Peas", brand: "Goya", category: null }, "chick fil a"));
+  assert.ok(matchesQuery({ name: "Chicken Sandwich", brand: "Chick-fil-A", category: null }, "chick fil a"));
+  assert.ok(matchesQuery({ name: "Egg, whole, raw", brand: null, category: null }, "eggs"));
+  assert.ok(matchesQuery({ name: "Beef, ground, 93% lean meat / 7% fat, raw", brand: null, category: null }, "93/7 ground beef"));
+});
+test("repeats across brands with same macros collapse", () => {
+  const base = { source: "usda" as const, barcode: null, name: "Chick Peas", kcal: 120, protein: 7, carbs: 20, fat: 2 };
+  const a = { ...base, brand: "A" }, b = { ...base, brand: "B" };
+  assert.equal(mergeResults([[a, b] as never[]]).length, 1);
+  assert.ok(dupKeys(a).some(k => dupKeys(b).includes(k)));
+});
+test("USDA labels are cleaned", () => {
+  assert.equal(cleanLabel("2 ONZ"), "2 oz");
+  assert.equal(cleanLabel("1 CHICKEN BREAST"), "1 chicken breast");
+  assert.equal(cleanLabel("3/4 cup"), "3/4 cup");
 });

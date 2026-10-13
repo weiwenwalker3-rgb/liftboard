@@ -4,7 +4,7 @@ import { kcalConsistent } from "./units";
 import { fetchJson } from "./usda";
 
 export interface OffProduct {
-  code?: string; product_name?: string; brands?: string; categories?: string;
+  code?: string; product_name?: string; brands?: string | string[]; categories?: string | string[];
   nutriments?: Record<string, number | string>; serving_size?: string; serving_quantity?: number | string;
   quantity?: string;
 }
@@ -44,8 +44,8 @@ export function normalizeOff(p: OffProduct): Food | null {
 
   return {
     id: foodId("off", p.code), source: "off", sourceId: p.code, name,
-    brand: (p.brands || "").split(",")[0].trim() || null,
-    category: (p.categories || "").split(",").pop()?.trim() || null, barcode: p.code, base: "g",
+    brand: (Array.isArray(p.brands) ? p.brands[0] : (p.brands || "").split(",")[0] || "").trim() || null,
+    category: (Array.isArray(p.categories) ? p.categories.slice(-1)[0] : (p.categories || "").split(",").pop() || "")?.trim() || null, barcode: p.code, base: "g",
     ...per, nutrients, servings, quality, qualityNote: note,
     sourceUrl: `https://world.openfoodfacts.org/product/${p.code}`, updatedAt: new Date().toISOString(),
   };
@@ -54,10 +54,18 @@ export function normalizeOff(p: OffProduct): Food | null {
 const FIELDS = "code,product_name,brands,categories,nutriments,serving_size,serving_quantity";
 
 export async function searchOff(q: string, page: number, pageSize: number): Promise<{ foods: Food[]; total: number }> {
-  const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page=${page}&page_size=${pageSize}&fields=${FIELDS}`;
-  const j = (await fetchJson("off", url)) as { count?: number; products?: OffProduct[] };
-  const foods = (j.products || []).map(normalizeOff).filter((x): x is Food => !!x);
-  return { foods, total: j.count || foods.length };
+  // The newer search service is faster and more reliable than the legacy CGI endpoint; fall back to it on failure.
+  try {
+    const url = `https://search.openfoodfacts.org/search?q=${encodeURIComponent(q)}&page=${page}&page_size=${pageSize}&fields=${FIELDS}`;
+    const j = (await fetchJson("off", url)) as { count?: number; hits?: OffProduct[] };
+    const foods = (j.hits || []).map(normalizeOff).filter((x): x is Food => !!x);
+    return { foods, total: j.count || foods.length };
+  } catch {
+    const url = `https://world.openfoodfacts.org/cgi/search.pl?search_terms=${encodeURIComponent(q)}&search_simple=1&action=process&json=1&page=${page}&page_size=${pageSize}&fields=${FIELDS}`;
+    const j = (await fetchJson("off", url)) as { count?: number; products?: OffProduct[] };
+    const foods = (j.products || []).map(normalizeOff).filter((x): x is Food => !!x);
+    return { foods, total: j.count || foods.length };
+  }
 }
 
 export async function offByBarcode(code: string): Promise<Food | null> {

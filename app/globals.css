@@ -840,3 +840,6 @@ details.lranks[open] .chev{transform:rotate(90deg)}
 .fs-new{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0}
 .fs-meal{display:grid;gap:4px;background:var(--surface-2);border-radius:10px;padding:9px 11px}
 .fs-actions{display:flex;gap:6px;flex-wrap:wrap}
+.fs-cook button{background:var(--surface-2);border:0;border-radius:999px;padding:5px 12px;font:inherit;font-size:13px;color:var(--muted);cursor:pointer}
+.fs-cook button[aria-pressed=true]{background:var(--gold);color:#1b1230;font-weight:600}
+.fs-cook button:disabled{opacity:.45;cursor:default}

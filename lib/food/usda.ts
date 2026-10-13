@@ -17,6 +17,13 @@ const num = (ns: UsdaNutrient[], n: string) => {
   return typeof hit?.value === "number" ? hit.value : null;
 };
 
+// USDA household labels are shouty and use odd unit codes ("2 ONZ", "1 CHICKEN BREAST").
+export function cleanLabel(s: string): string {
+  let t = s.replace(/\bONZ\b/gi, "oz").replace(/\b(GRM|GM)\b/gi, "g").replace(/\bMLT\b/gi, "ml");
+  if (t === t.toUpperCase()) t = t.toLowerCase();
+  return t.replace(/\s+/g, " ").trim();
+}
+
 const title = (s: string) => (s === s.toUpperCase() ? s.toLowerCase().replace(/\b[a-z]/g, c => c.toUpperCase()) : s);
 
 export function normalizeUsda(u: UsdaFood): Food | null {
@@ -30,14 +37,14 @@ export function normalizeUsda(u: UsdaFood): Food | null {
 
   const servings: Food["servings"] = [];
   if (u.servingSize && u.servingSize > 0) {
-    const label = u.householdServingFullText ? `${u.householdServingFullText} (${u.servingSize} ${liquid ? "ml" : "g"})` : `1 serving (${u.servingSize} ${liquid ? "ml" : "g"})`;
+    const label = u.householdServingFullText ? `${cleanLabel(u.householdServingFullText)} (${u.servingSize} ${liquid ? "ml" : "g"})` : `1 serving (${u.servingSize} ${liquid ? "ml" : "g"})`;
     servings.push({ label, grams: u.servingSize, isDefault: true });
   }
   for (const pt of u.foodPortions || []) {
     if (!pt.gramWeight) continue;
     const amt = pt.amount && pt.amount !== 1 ? `${pt.amount} ` : "1 ";
     const what = pt.portionDescription || [pt.measureUnit?.name, pt.modifier].filter(x => x && x !== "undetermined").join(" ");
-    if (what) servings.push({ label: `${amt}${what} (${Math.round(pt.gramWeight)} g)`, grams: pt.gramWeight, isDefault: servings.length === 0 });
+    if (what) servings.push({ label: `${cleanLabel(amt + what)} (${Math.round(pt.gramWeight)} g)`, grams: pt.gramWeight, isDefault: servings.length === 0 });
   }
 
   const missing = [p == null && "protein", c == null && "carbs", f == null && "fat"].filter(Boolean) as string[];
@@ -80,13 +87,24 @@ export async function fetchJson(source: string, url: string, init: RequestInit =
   throw last instanceof UpstreamError ? last : new UpstreamError(source, "request failed");
 }
 
-export async function searchUsda(q: string, page: number, pageSize: number): Promise<{ foods: Food[]; total: number }> {
+const SHORT = 8; // slots on page 1 reserved for basic ingredients
+
+async function usdaPage(q: string, types: string, page: number, pageSize: number) {
   const key = process.env.USDA_API_KEY || "DEMO_KEY";
-  const url = `${BASE}/foods/search?query=${encodeURIComponent(q)}&pageNumber=${page}&pageSize=${pageSize}` +
-    `&dataType=Foundation,SR%20Legacy,Branded&api_key=${encodeURIComponent(key)}`;
+  const url = `${BASE}/foods/search?query=${encodeURIComponent(q)}&pageNumber=${page}&pageSize=${pageSize}&requireAllWords=true` +
+    `&dataType=${encodeURIComponent(types)}&api_key=${encodeURIComponent(key)}`;
   const j = (await fetchJson("usda", url)) as { totalHits?: number; foods?: UsdaFood[] };
-  const foods = (j.foods || []).map(normalizeUsda).filter((x): x is Food => !!x);
-  return { foods, total: j.totalHits || foods.length };
+  return { foods: (j.foods || []).map(normalizeUsda).filter((x): x is Food => !!x), total: j.totalHits || 0 };
+}
+
+/** Page 1 leads with basic ingredients (Foundation, SR Legacy), then branded products. Later pages are branded only. */
+export async function searchUsda(q: string, page: number, pageSize: number): Promise<{ foods: Food[]; total: number }> {
+  if (page > 1) return usdaPage(q, "Branded", page, pageSize);
+  const [basic, branded] = await Promise.allSettled([usdaPage(q, "Foundation,SR Legacy", 1, SHORT), usdaPage(q, "Branded", 1, pageSize - SHORT)]);
+  if (branded.status === "rejected" && basic.status === "rejected") throw branded.reason;
+  const b = basic.status === "fulfilled" ? basic.value : { foods: [], total: 0 };
+  const r = branded.status === "fulfilled" ? branded.value : { foods: [], total: 0 };
+  return { foods: [...b.foods, ...r.foods], total: b.total + r.total };
 }
 
 export async function usdaByBarcode(code: string): Promise<Food | null> {

@@ -39,3 +39,24 @@ export function dedupeKey(f: Pick<Food, "barcode" | "brand" | "name" | "source">
   const n = (s: string | null) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
   return `nm:${n(f.brand)}|${n(f.name)}`;
 }
+
+/** Every key a result answers to. Two foods sharing any key are treated as repeats. */
+export function dupKeys(f: Pick<Food, "barcode" | "brand" | "name" | "source" | "kcal" | "protein" | "carbs" | "fat">): string[] {
+  const n = (s: string | null) => (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  const keys = [dedupeKey(f)];
+  if (f.source !== "user" && f.source !== "restaurant") {
+    // Same name with the same macros under different brands or record ids is a repeat for the person searching.
+    keys.push(`nm2:${n(f.name)}|${Math.round(f.kcal)}|${Math.round(f.protein)}|${Math.round(f.carbs)}|${Math.round(f.fat)}`);
+  }
+  return keys;
+}
+
+/** All meaningful query words (prefix match) must appear in name, brand or category. "chick fil a" will not match "chick peas". */
+export function matchesQuery(f: Pick<Food, "name" | "brand" | "category">, q: string): boolean {
+  const hay = ` ${`${f.name} ${f.brand || ""} ${f.category || ""}`.toLowerCase().replace(/[^a-z0-9]+/g, " ")} `;
+  const joined = hay.replace(/ /g, "");
+  return q.toLowerCase().split(/[^a-z0-9]+/).filter(w => w.length > 1).every(w => {
+    const forms = [w, ...(w.length > 3 && w.endsWith("s") ? [w.slice(0, -1)] : []), ...(w.length > 4 && w.endsWith("es") ? [w.slice(0, -2)] : [])];
+    return forms.some(x => hay.includes(" " + x) || joined.includes(x));
+  });
+}

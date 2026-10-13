@@ -1,5 +1,5 @@
 // Catalog access: upsert, lookup, cached merged search across sources.
-import { type Food, dedupeKey } from "./model";
+import { type Food, dedupeKey, dupKeys, matchesQuery } from "./model";
 import { foodReady, foodSql } from "./db";
 import { searchUsda, usdaByBarcode, UpstreamError } from "./usda";
 import { searchOff, offByBarcode } from "./off";
@@ -57,7 +57,7 @@ export async function getFoods(ids: string[]): Promise<Food[]> {
   return out;
 }
 
-/** Interleave sources, drop duplicates (same barcode, or same brand+name). */
+/** Interleave sources, drop repeats (same barcode, same brand+name, or same name with the same macros). */
 export function mergeResults(lists: Food[][]): Food[] {
   const seen = new Set<string>();
   const out: Food[] = [];
@@ -66,9 +66,9 @@ export function mergeResults(lists: Food[][]): Food[] {
     for (const l of lists) {
       const f = l[i];
       if (!f) continue;
-      const k = dedupeKey(f);
-      if (seen.has(k)) continue;
-      seen.add(k);
+      const ks = dupKeys(f);
+      if (ks.some(k => seen.has(k))) continue;
+      ks.forEach(k => seen.add(k));
       out.push(f);
     }
   }
@@ -130,7 +130,7 @@ export async function searchFoods(q: string, source: SourcePick, page: number, p
       notices.push(`${jobs[i][0]} is unavailable${e?.status === 429 ? " (rate limited)" : ""}; showing results from the other sources.`);
     }
   });
-  const foods = mergeResults(local.length ? [local, ...lists] : lists);
+  const foods = mergeResults((local.length ? [local, ...lists] : lists).map(l => l.filter(f => f.source === "restaurant" || matchesQuery(f, nq))));
   if (settled.some(s => s.status === "fulfilled")) {
     await upsertFoods(foods.filter(f => f.source !== "restaurant")).catch(() => {});
     // Only cache when every requested source answered, so a transient failure is not pinned for 24 h.
