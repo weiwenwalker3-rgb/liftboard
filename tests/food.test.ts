@@ -248,3 +248,18 @@ test("generalize: 'rice' keeps rice, drops flour, cakes and noodles", () => {
   const g2 = generalize([sr("Rice, white, glutinous, unenriched, uncooked", 370), sr("Rice, white, long-grain, raw", 365), sr("Rice, white, glutinous, cooked", 97), sr("Rice, white, long-grain, cooked", 130), sr("Rice, mystery", 300)], "rice");
   assert.ok(g2.every(f => /raw|cooked/.test(f.name)));
 });
+test("generalize: ground beef shows the five lean ratios, raw, in order", () => {
+  const mk = (lean: number, kcal: number, raw = true) => sr(`Beef, ground, ${lean}% lean meat / ${100 - lean}% fat, ${raw ? "raw" : "patty, cooked, pan-broiled"}`, kcal);
+  const list = [mk(70, 332), mk(75, 297), mk(80, 254), mk(80, 250), mk(85, 215), mk(90, 176), mk(93, 152), mk(95, 137), mk(97, 121), mk(80, 270, false), sr("Beef, ground, patties, frozen", 200)];
+  const g = generalize(list, "ground beef");
+  assert.deepEqual(g.map(f => f.name), ["Ground beef 70/30, raw", "Ground beef 80/20, raw", "Ground beef 90/10, raw", "Ground beef 93/7, raw", "Ground beef 97/3, raw"]);
+  assert.equal(g[1].kcal, 252);
+  assert.deepEqual(generalize(list, "93/7 ground beef").map(f => f.name), ["Ground beef 93/7, raw"]);
+  assert.ok(cookInfo({ ...g[0], nutrients: {} })!.state === "raw");
+});
+test("generalize: same macros merge into one entry", () => {
+  const g = generalize([sr("Lettuce, cos or romaine, raw", 15), sr("Lettuce, green leaf, raw", 15), sr("Lettuce, red leaf, raw", 15), sr("Lettuce, cooked, boiled", 18)], "lettuce");
+  assert.equal(g.filter(f => /raw/.test(f.name)).length, 1);
+  const two = generalize([sr("Spinach, raw", 23), sr("Kale, raw", 23)].map(f => ({ ...f, protein: 2.9, carbs: 3.6 })), "raw");
+  assert.equal(two.length, 1);
+});

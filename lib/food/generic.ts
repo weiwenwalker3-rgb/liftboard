@@ -19,8 +19,35 @@ export function isPrepared(name: string, q: string): boolean {
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 const round = (n: number) => Math.round(n * 100) / 100;
 
+const RATIOS = [70, 80, 90, 93, 97];
+const LEAN = /(\d{2})%\s*lean meat\s*\/\s*(\d{1,2})%\s*fat/i;
+
+/** "ground beef": the five common lean ratios, raw. A typed ratio ("93/7") narrows the list. */
+function groundBeef(foods: Food[], qw: string[]): Food[] | null {
+  if (!(qw.includes("beef") && (qw.includes("ground") || qw.includes("mince"))) && !qw.includes("hamburger")) return null;
+  const typed = RATIOS.filter(r => qw.includes(String(r)));
+  const out: Food[] = [];
+  for (const lean of typed.length ? typed : RATIOS) {
+    const m = foods.filter(f => f.source === "usda" && !f.brand && /^beef,\s*ground/i.test(f.name) && RAW.test(f.name) && LEAN.exec(f.name)?.[1] === String(lean));
+    if (!m.length) continue;
+    const fat = 100 - lean;
+    const avg = (k: "kcal" | "protein" | "carbs" | "fat") => round(m.reduce((a, x) => a + x[k], 0) / m.length);
+    const nutrients: Record<string, number> = {};
+    new Set(m.flatMap(x => Object.keys(x.nutrients))).forEach(k => { const vs = m.filter(x => k in x.nutrients).map(x => x.nutrients[k]); nutrients[k] = round(vs.reduce((a, b) => a + b, 0) / vs.length); });
+    out.push({
+      ...m[0], id: foodId("usda", `generic-ground-beef-${lean}-${fat}-raw`), sourceId: `generic-ground-beef-${lean}-${fat}-raw`,
+      name: `Ground beef ${lean}/${fat}, raw`, category: "Generic", kcal: avg("kcal"), protein: avg("protein"), carbs: avg("carbs"), fat: avg("fat"),
+      nutrients, servings: [], quality: "complete", qualityNote: m.length > 1 ? `Average of ${m.length} USDA entries` : null,
+      sourceUrl: m[0].sourceUrl, updatedAt: new Date().toISOString(),
+    });
+  }
+  return out.length ? out : null;
+}
+
 export function generalize(foods: Food[], q: string, max = 8): Food[] {
   const qw = words(q).map(stem).filter(w => w.length > 1);
+  const beef = groundBeef(foods, qw);
+  if (beef) return beef;
   const groups = new Map<string, { head: string; segs: string[]; state: string; members: Food[] }>();
   for (const f of foods) {
     if (f.source !== "usda" || f.brand || isPrepared(f.name, q) || !matchesQuery(f, q)) continue;
@@ -60,5 +87,12 @@ export function generalize(foods: Food[], q: string, max = 8): Food[] {
   // A group with no raw/cooked label is redundant once raw and cooked entries exist.
   if (pool.some(x => RAW.test(x.f.name) || COOKED.test(x.f.name))) pool = pool.filter(x => RAW.test(x.f.name) || COOKED.test(x.f.name));
   pool.sort((a, b) => Number(b.exact) - Number(a.exact) || rank(a.f) - rank(b.f) || b.n - a.n || a.f.name.length - b.f.name.length);
-  return pool.slice(0, max).map(x => x.f);
+  // Entries with the same state and the same macros are the same food for tracking: keep one.
+  const seen = new Set<string>();
+  const merged = pool.filter(x => {
+    const k = [RAW.test(x.f.name) ? "r" : COOKED.test(x.f.name) ? "c" : "", Math.round(x.f.kcal), Math.round(x.f.protein), Math.round(x.f.carbs), Math.round(x.f.fat)].join("|");
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+  return merged.slice(0, max).map(x => x.f);
 }
