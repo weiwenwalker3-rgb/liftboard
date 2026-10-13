@@ -239,3 +239,10 @@ test("generalize drops restaurant dishes and mixed dishes", () => {
   assert.deepEqual(g.map(f => f.name), ["Lettuce, raw"]);
   assert.ok(isChainFood({ name: "x", brand: null, category: "Restaurant Foods" }));
 });
+test("generalize: 'rice' keeps rice, drops flour, cakes and noodles", () => {
+  const g = generalize([
+    sr("Rice, white, long-grain, regular, raw, enriched", 365), sr("Rice, brown, long-grain, raw", 370), sr("Rice, white, long-grain, regular, cooked", 130), sr("Rice, brown, long-grain, cooked", 112),
+    sr("Wild rice, raw", 357), sr("Rice noodles, cooked", 108), sr("Flour, rice, white", 366), sr("Snacks, rice cakes, brown rice", 387), sr("Bread, rice bran", 250),
+  ], "rice");
+  assert.deepEqual(g.map(f => f.name), ["Rice, raw", "Rice, cooked"]);
+});

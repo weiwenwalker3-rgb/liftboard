@@ -38,7 +38,7 @@ export function generalize(foods: Food[], q: string, max = 8): Food[] {
   }
   const out = [...groups.values()].map(g => {
     const m = g.members;
-    if (m.length === 1) return { f: m[0], n: 1, exact: words(g.head).map(stem).join(" ") === qw.join(" ") };
+    if (m.length === 1) return { f: m[0], n: 1, exact: words(g.head).map(stem).every(w => qw.includes(w)) };
     const avg = (k: "kcal" | "protein" | "carbs" | "fat") => round(m.reduce((a, x) => a + x[k], 0) / m.length);
     const nutrients: Record<string, number> = {};
     const keys = new Set(m.flatMap(x => Object.keys(x.nutrients)));
@@ -51,10 +51,12 @@ export function generalize(foods: Food[], q: string, max = 8): Food[] {
       nutrients, servings: [], quality: "complete", qualityNote: `Average of ${m.length} USDA entries`,
       sourceUrl: `https://fdc.nal.usda.gov/food-search?query=${encodeURIComponent(q)}`, updatedAt: new Date().toISOString(),
     };
-    return { f, n: m.length, exact: words(g.head).map(stem).join(" ") === qw.join(" ") };
+    return { f, n: m.length, exact: words(g.head).map(stem).every(w => qw.includes(w)) };
   });
   // Raw before cooked, then the most common variants, then the shortest (simplest) names.
   const rank = (f: Food) => (RAW.test(f.name) ? 0 : COOKED.test(f.name) ? 1 : 2);
-  out.sort((a, b) => Number(b.exact) - Number(a.exact) || rank(a.f) - rank(b.f) || b.n - a.n || a.f.name.length - b.f.name.length);
-  return out.slice(0, max).map(x => x.f);
+  // When some entries are the thing itself ("Rice, ..."), drop look-alikes ("Rice flour", "Snacks, rice cakes").
+  const pool = out.some(x => x.exact) ? out.filter(x => x.exact) : out;
+  pool.sort((a, b) => Number(b.exact) - Number(a.exact) || rank(a.f) - rank(b.f) || b.n - a.n || a.f.name.length - b.f.name.length);
+  return pool.slice(0, max).map(x => x.f);
 }
