@@ -2,7 +2,7 @@
 // "Lettuce, cos or romaine, raw", "Lettuce, butterhead, raw", ... become one "Lettuce, raw" entry (average of the variants).
 import { type Food, foodId, matchesQuery } from "./model";
 
-const PREPARED = /\b(medley|blend|blends|assorted|variety|combo|kit|trio|duo|mix|mixed|breaded|battered|nuggets?|patties|patty|tenders?|deli|luncheon|prepackaged|dinner|entree|snack|salad|soup|sauce|with|taco|tacos|burrito|sandwich|pizza|burger|wrap|stuffed|casserole)\b/i;
+const PREPARED = /\b(medley|blend|blends|assorted|variety|combo|kit|trio|duo|mix|mixed|breaded|battered|nuggets?|patties|patty|tenders?|deli|luncheon|prepackaged|dinner|entree|snack|salad|soup|sauce|with|taco|tacos|burrito|sandwich|pizza|burger|wrap|stuffed|casserole|sliced|flavor|flavored|mesquite|glazed|seasoned)\b/i;
 const RAW = /\b(raw|uncooked)\b/i;
 const COOKED = /\b(cooked|roasted|boiled|grilled|baked|broiled|steamed|pan[- ]?(fried|broiled|browned)|braised|stewed|simmered|fried)\b/i;
 
@@ -56,7 +56,9 @@ export function generalize(foods: Food[], q: string, max = 8): Food[] {
   // Raw before cooked, then the most common variants, then the shortest (simplest) names.
   const rank = (f: Food) => (RAW.test(f.name) ? 0 : COOKED.test(f.name) ? 1 : 2);
   // When some entries are the thing itself ("Rice, ..."), drop look-alikes ("Rice flour", "Snacks, rice cakes").
-  const pool = out.some(x => x.exact) ? out.filter(x => x.exact) : out;
+  let pool = out.some(x => x.exact) ? out.filter(x => x.exact) : out;
+  // A group with no raw/cooked label is redundant once raw and cooked entries exist.
+  if (pool.some(x => RAW.test(x.f.name) || COOKED.test(x.f.name))) pool = pool.filter(x => RAW.test(x.f.name) || COOKED.test(x.f.name));
   pool.sort((a, b) => Number(b.exact) - Number(a.exact) || rank(a.f) - rank(b.f) || b.n - a.n || a.f.name.length - b.f.name.length);
   return pool.slice(0, max).map(x => x.f);
 }

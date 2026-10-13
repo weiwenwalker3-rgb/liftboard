@@ -245,4 +245,6 @@ test("generalize: 'rice' keeps rice, drops flour, cakes and noodles", () => {
     sr("Wild rice, raw", 357), sr("Rice noodles, cooked", 108), sr("Flour, rice, white", 366), sr("Snacks, rice cakes, brown rice", 387), sr("Bread, rice bran", 250),
   ], "rice");
   assert.deepEqual(g.map(f => f.name), ["Rice, raw", "Rice, cooked"]);
+  const g2 = generalize([sr("Rice, white, glutinous, unenriched, uncooked", 370), sr("Rice, white, long-grain, raw", 365), sr("Rice, white, glutinous, cooked", 97), sr("Rice, white, long-grain, cooked", 130), sr("Rice, mystery", 300)], "rice");
+  assert.ok(g2.every(f => /raw|cooked/.test(f.name)));
 });
