@@ -143,3 +143,8 @@ test("USDA labels are cleaned", () => {
   assert.equal(cleanLabel("1 CHICKEN BREAST"), "1 chicken breast");
   assert.equal(cleanLabel("3/4 cup"), "3/4 cup");
 });
+
+test("OFF records with impossible per-100 values are dropped and values are rounded", () => {
+  assert.equal(normalizeOff({ code: "1", product_name: "Pack", nutriments: { "energy-kcal_100g": 3166, proteins_100g: 333, carbohydrates_100g: 133, fat_100g: 141 } }), null);
+  assert.equal(normalizeOff({ code: "2", product_name: "Sauce", nutriments: { "energy-kcal_100g": 33.82663847, proteins_100g: 0, carbohydrates_100g: 1.4799154, fat_100g: 2.9598 } })!.kcal, 33.8);
+});

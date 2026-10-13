@@ -25,7 +25,10 @@ export function normalizeOff(p: OffProduct): Food | null {
   const missing = [kcal == null && "calories", pr == null && "protein", c == null && "carbs", f == null && "fat"].filter(Boolean) as string[];
   if (kcal == null && pr == null && c == null && f == null) return null;
 
-  const per = { kcal: kcal ?? 0, protein: pr ?? 0, carbs: c ?? 0, fat: f ?? 0 };
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  const per = { kcal: r1(kcal ?? 0), protein: r1(pr ?? 0), carbs: r1(c ?? 0), fat: r1(f ?? 0) };
+  // Community entries sometimes hold per-pack or mistyped values (e.g. 47,000 kcal per 100 g). Nothing real exceeds these.
+  if (per.kcal > 950 || per.protein > 100 || per.carbs > 100 || per.fat > 100 || per.protein + per.carbs + per.fat > 105) return null;
   let quality: Food["quality"] = "complete";
   let note: string | null = null;
   if (missing.length) { quality = "incomplete"; note = `Missing ${missing.join(", ")} (community-entered data)`; }
