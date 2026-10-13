@@ -22,5 +22,5 @@ export function chainsIn(text: string, extra: string[] = []): string[] {
 
 /** True when a food belongs to a restaurant chain: chain name in its name or brand, or USDA's "Fast Foods" category. */
 export function isChainFood(f: { name: string; brand: string | null; category: string | null }): boolean {
-  return f.category === "Fast Foods" || chainsIn(`${f.name} ${f.brand || ""}`).length > 0;
+  return f.category === "Fast Foods" || f.category === "Restaurant Foods" || chainsIn(`${f.name} ${f.brand || ""}`).length > 0;
 }

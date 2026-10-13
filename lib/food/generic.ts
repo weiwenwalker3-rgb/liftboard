@@ -2,7 +2,7 @@
 // "Lettuce, cos or romaine, raw", "Lettuce, butterhead, raw", ... become one "Lettuce, raw" entry (average of the variants).
 import { type Food, foodId, matchesQuery } from "./model";
 
-const PREPARED = /\b(medley|blend|blends|assorted|variety|combo|kit|trio|duo|mix|mixed|breaded|battered|nuggets?|patties|patty|tenders?|deli|luncheon|prepackaged|dinner|entree|snack|salad|soup|sauce)\b/i;
+const PREPARED = /\b(medley|blend|blends|assorted|variety|combo|kit|trio|duo|mix|mixed|breaded|battered|nuggets?|patties|patty|tenders?|deli|luncheon|prepackaged|dinner|entree|snack|salad|soup|sauce|with|taco|tacos|burrito|sandwich|pizza|burger|wrap|stuffed|casserole)\b/i;
 const RAW = /\b(raw|uncooked)\b/i;
 const COOKED = /\b(cooked|roasted|boiled|grilled|baked|broiled|steamed|pan[- ]?(fried|broiled|browned)|braised|stewed|simmered|fried)\b/i;
 

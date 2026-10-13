@@ -234,3 +234,8 @@ test("isPrepared respects what was typed", () => {
   assert.ok(!isPrepared("Lettuce Medley", "lettuce medley"));
   assert.ok(isPrepared("Chicken breast tenders, breaded", "chicken breast"));
 });
+test("generalize drops restaurant dishes and mixed dishes", () => {
+  const g = generalize([sr("Lettuce, raw", 15), sr("ON THE BORDER, soft taco with ground beef, cheese and lettuce", 229), sr("Restaurant, Mexican, soft taco with ground beef, cheese and lettuce", 219)], "lettuce");
+  assert.deepEqual(g.map(f => f.name), ["Lettuce, raw"]);
+  assert.ok(isChainFood({ name: "x", brand: null, category: "Restaurant Foods" }));
+});
