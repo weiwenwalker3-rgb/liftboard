@@ -1466,7 +1466,6 @@ function calcState(){
 }
 function renderCalc(){
   const c = calcState(), imp = unit() === "lb";
-  document.querySelectorAll("#cSex button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === c.sex));
   document.querySelectorAll("#cGoal button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === c.goal));
   $("cxBwl").textContent = `Bodyweight (${unit()})`;
   if (document.activeElement !== $("cxBw")) $("cxBw").value = Math.round(toU(c.bw)*10)/10;
@@ -1498,7 +1497,7 @@ function readCalc(){
 $("calcForm").addEventListener("input", readCalc);
 $("calcForm").addEventListener("change", readCalc);
 $("calcForm").addEventListener("submit", e => e.preventDefault());
-$("cSex").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ calcState().sex = b.dataset.v; save(); renderCalc(); } });
+$("cSex").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ calcState().sex = b.dataset.v; save(); renderProfile(); } });
 $("cGoal").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ calcState().goal = b.dataset.v; save(); renderCalc(); } });
 $("calcUse").addEventListener("click", () => { const m = calcMacros(calcState()); state.goals = {k:m.k, p:m.p, c:m.c, f:m.f}; commit("Targets updated from the calculator"); });
 function updateCal(){ const p=num($("ffP").value), c=num($("ffC").value), f=num($("ffF").value); $("ffCal").textContent = `That's about ${fmt(p*4+c*4+f*9)} kcal.`; }
@@ -1510,6 +1509,7 @@ function renderProfile(){
   if (document.activeElement !== $("pN")) $("pN").value = state.profile.tag || "";
   if (document.activeElement !== $("pB")) $("pB").value = Math.round(toU(state.profile.bw)*10)/10;
   $("pBl").textContent = `Bodyweight (${unit()})`;
+  document.querySelectorAll("#cSex button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === calcState().sex));
   document.querySelectorAll("#unitSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === unit()));
   document.querySelectorAll("#modeSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === state.settings.mode));
   $("swatches").innerHTML = Object.entries(THEMES).map(([k,t]) => `<button class="sw" type="button" data-theme-k="${k}" aria-pressed="${state.settings.graph===k}"><i style="--c:${t.c}"></i>${t.name}</button>`).join("");
