@@ -1622,7 +1622,7 @@ $("unitSeg").addEventListener("click", e => { const b = e.target.closest("button
 $("modeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ state.settings.mode = b.dataset.v; applyTheme(); commit(); } });
 $("swatches").addEventListener("click", e => { const b = e.target.closest("[data-theme-k]"); if (b){ state.settings.graph = b.dataset.themeK; applyTheme(); commit("Graph theme: " + THEMES[b.dataset.themeK].name); } });
 $("clearSample").addEventListener("click", () => { state.lifts = state.lifts.filter(l => !l.sample); state.foods = state.foods.filter(f => !f.sample); commit("Sample data removed"); });
-$("loadSample").addEventListener("click", () => { const s = seed(); state.lifts = s.lifts; state.foods = s.foods; commit("Sample training data loaded"); });
+$("loadSample").addEventListener("click", () => { const s = seed(); state.lifts = state.lifts.filter(l => !l.sample).concat(s.lifts); state.foods = state.foods.filter(f => !f.sample).concat(s.foods); commit("Sample training data loaded"); });
 $("wipe").addEventListener("click", () => { $("wipe").hidden = true; $("wipeYes").hidden = false; });
 $("wipeYes").addEventListener("click", () => { state.lifts = []; state.foods = []; commit("Training data deleted"); });
 mq.addEventListener("change", renderCharts);
