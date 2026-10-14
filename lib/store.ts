@@ -1,8 +1,7 @@
 // Storage layer.
 //   Neon Postgres  -> accounts, PRs, social docs (small, queried together)
-//   Vercel Blob    -> each user's private training log (large JSON document)
+//   Neon Postgres  -> each user's private training log (lb_states); Blob is only read for logs saved before the move
 // With no DATABASE_URL the app falls back to in-memory maps (local dev only).
-// With no BLOB_READ_WRITE_TOKEN the training log is kept in Postgres instead.
 import { neon } from "@neondatabase/serverless";
 import { get as blobGet, put as blobPut } from "@vercel/blob";
 
@@ -92,23 +91,19 @@ export async function allDocs(col: Col): Promise<Record<string, unknown>> {
 const statePath = (id: string) => `liftboard/state/${id}.json`;
 
 export async function getState(id: string): Promise<string | null> {
-  if (BLOB) {
-    const r = await blobGet(statePath(id), { access: "private", useCache: false });
-    if (!r || r.statusCode !== 200) return null;
-    return await new Response(r.stream).text();
-  }
   await ready();
-  if (!sql) return mem.states.get(id) ?? null;
-  const r = await sql`SELECT data FROM lb_states WHERE id = ${id}`;
-  return r[0] ? (r[0] as { data: string }).data : null;
+  if (sql) {
+    const r = await sql`SELECT data FROM lb_states WHERE id = ${id}`;
+    if (r[0]) return (r[0] as { data: string }).data;
+  } else if (mem.states.has(id)) return mem.states.get(id)!;
+  // Logs saved before the move to Postgres are still in Blob; read them once and the next save copies them over.
+  if (BLOB) {
+    const r = await blobGet(statePath(id), { access: "private", useCache: false }).catch(() => null);
+    if (r && r.statusCode === 200) return await new Response(r.stream).text();
+  }
+  return null;
 }
 export async function setState(id: string, json: string): Promise<void> {
-  if (BLOB) {
-    await blobPut(statePath(id), json, {
-      access: "private", contentType: "application/json", addRandomSuffix: false, allowOverwrite: true,
-    });
-    return;
-  }
   await ready();
   if (!sql) { mem.states.set(id, json); return; }
   await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${json})
