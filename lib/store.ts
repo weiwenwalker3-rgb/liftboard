@@ -99,7 +99,11 @@ export async function getState(id: string): Promise<string | null> {
   // Logs saved before the move to Postgres are still in Blob; read them once and the next save copies them over.
   if (BLOB) {
     const r = await blobGet(statePath(id), { access: "private", useCache: false }).catch(() => null);
-    if (r && r.statusCode === 200) return await new Response(r.stream).text();
+    if (r && r.statusCode === 200) {
+      const text = await new Response(r.stream).text();
+      if (sql) await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${text}) ON CONFLICT (id) DO NOTHING`.catch(() => {});
+      return text;
+    }
   }
   return null;
 }
