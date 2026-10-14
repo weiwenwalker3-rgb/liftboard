@@ -14,7 +14,7 @@ export interface UserRow { id: string; name: string; salt: string; hash: string 
 export type Col = "prs" | "social";
 
 const g = globalThis as unknown as {
-  __lb?: { users: Map<string, UserRow>; docs: Map<string, string>; states: Map<string, string> };
+  __lb?: { users: Map<string, UserRow>; docs: Map<string, string>; states: Map<string, StateRev> };
   __lbReady?: Promise<void>;
 };
 const mem = (g.__lb ??= { users: new Map(), docs: new Map(), states: new Map() });
@@ -90,26 +90,40 @@ export async function allDocs(col: Col): Promise<Record<string, unknown>> {
 
 const statePath = (id: string) => `liftboard/state/${id}.json`;
 
-export async function getState(id: string): Promise<string | null> {
+export interface StateRev { data: string; rev: string }
+
+export async function getState(id: string): Promise<StateRev | null> {
   await ready();
   if (sql) {
-    const r = await sql`SELECT data FROM lb_states WHERE id = ${id}`;
-    if (r[0]) return (r[0] as { data: string }).data;
+    const r = await sql`SELECT data, updated_at::text AS rev FROM lb_states WHERE id = ${id}`;
+    if (r[0]) return r[0] as StateRev;
   } else if (mem.states.has(id)) return mem.states.get(id)!;
-  // Logs saved before the move to Postgres are still in Blob; read them once and the next save copies them over.
+  // Logs saved before the move to Postgres are still in Blob; they are copied into Postgres the first time they are read.
   if (BLOB) {
     const r = await blobGet(statePath(id), { access: "private", useCache: false }).catch(() => null);
     if (r && r.statusCode === 200) {
       const text = await new Response(r.stream).text();
-      if (sql) await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${text}) ON CONFLICT (id) DO NOTHING`.catch(() => {});
-      return text;
+      if (sql) {
+        await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${text}) ON CONFLICT (id) DO NOTHING`.catch(() => {});
+        const again = await sql`SELECT data, updated_at::text AS rev FROM lb_states WHERE id = ${id}`.catch(() => []);
+        if (again[0]) return again[0] as StateRev;
+      }
+      return { data: text, rev: "blob" };
     }
   }
   return null;
 }
-export async function setState(id: string, json: string): Promise<void> {
-  await ready();
-  if (!sql) { mem.states.set(id, json); return; }
-  await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${json})
-    ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()`;
+
+/** `base` undefined = legacy client that doesn't send one (always writes). Otherwise saves only if the caller last saw the current version (`base`), so a stale tab or device can't overwrite newer sets. */
+export async function putState(id: string, json: string, base: string | null | undefined): Promise<{ ok: true; rev: string } | { ok: false; current: StateRev | null }> {
+  const cur = base === undefined ? null : await getState(id);
+  if (base !== undefined && (cur?.rev ?? null) !== base) return { ok: false, current: cur };
+  if (!sql) { const rev = String(Date.now()) + Math.random(); mem.states.set(id, { data: json, rev }); return { ok: true, rev }; }
+  const r = base === undefined
+    ? await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${json}) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, updated_at = clock_timestamp() RETURNING updated_at::text AS rev`
+    : base === null
+    ? await sql`INSERT INTO lb_states (id, data) VALUES (${id}, ${json}) ON CONFLICT (id) DO NOTHING RETURNING updated_at::text AS rev`
+    : await sql`UPDATE lb_states SET data = ${json}, updated_at = clock_timestamp() WHERE id = ${id} AND updated_at::text = ${base} RETURNING updated_at::text AS rev`;
+  if (r[0]) return { ok: true, rev: (r[0] as { rev: string }).rev };
+  return { ok: false, current: await getState(id) };
 }

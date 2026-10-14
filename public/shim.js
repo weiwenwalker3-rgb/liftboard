@@ -9,7 +9,7 @@
   function api(url, opts) {
     return fetch(url, Object.assign({ credentials: "same-origin", cache: "no-store" }, opts)).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) { var e = new Error(j.error || "Request failed"); e.code = j.error || String(r.status); throw e; }
+        if (!r.ok) { var e = new Error(j.error || "Request failed"); e.code = j.error || String(r.status); e.body = j; throw e; }
         return j;
       });
     });
@@ -27,26 +27,39 @@
     return function () { stopped = true; clearTimeout(t); };
   }
 
-  var pending = 0, wseq = 0;
+  var pending = 0, wseq = 0, rev = null, stateCb = null;
 
   function makeDb(myId) {
     return {
       doc: function (path) {
         return {
           set: function (data) {
+            var isState = /\/state$/.test(path);
             pending++; wseq++;
-            return api("/api/db", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: path, data: data }) })
-              .then(function () { if (/\/state$/.test(path)) lastState = JSON.stringify(data); })
+            return api("/api/db", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path: path, data: data, base: isState ? rev : undefined }) })
+              .then(function (r) { if (isState){ lastState = JSON.stringify(data); if (r && r.rev) rev = r.rev; } })
+              .catch(function (e) {
+                // Another device or tab saved first: keep its version instead of overwriting it, and tell the app.
+                if (isState && e && e.code === "conflict" && e.body){
+                  rev = e.body.rev || null;
+                  if (e.body.data){ lastState = JSON.stringify(e.body.data); if (stateCb) stateCb({ exists: true, metadata: { hasPendingWrites: false }, data: function () { return e.body.data; } }); }
+                  try { window.dispatchEvent(new CustomEvent("lb:conflict")); } catch (x) {}
+                  return;
+                }
+                throw e;
+              })
               .finally(function () { pending--; wseq++; });
           },
           onSnapshot: function (cb, errCb) {
             var isState = /\/state$/.test(path);
             var isCol = false;
+            if (isState) stateCb = cb;
             var seen = null;
             var stop = every(function () {
               var startSeq = wseq;
               api("/api/db?doc=state").then(function (r) {
                 if (pending > 0 || startSeq !== wseq) return;
+                if (isState) rev = r.rev || null;
                 var js = JSON.stringify(r.data);
                 if (seen === js || (isState && js === lastState && seen !== null)) { seen = js; return; }
                 seen = js; lastState = js;

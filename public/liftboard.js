@@ -1608,6 +1608,7 @@ $("liftForm").addEventListener("submit", e => {
 $("recent").addEventListener("click", e => { const b = e.target.closest("[data-del-lift]"); if (b){ state.lifts = state.lifts.filter(l => l.id !== b.dataset.delLift); commit("Set deleted"); } });
 ["ffP","ffC","ffF"].forEach(id => $(id).addEventListener("input", updateCal));
 $("foodForm").addEventListener("submit", e => { e.preventDefault(); state.foods.push({id:uid8(), date:today(), name:$("ffN").value.trim() || "Food", p:num($("ffP").value), c:num($("ffC").value), f:num($("ffF").value)}); $("ffN").value = ""; commit("Added to today"); });
+window.addEventListener("lb:conflict", () => toast("Your account was updated on another device. Showing the latest, so redo your last change if it is missing."));
 window.addEventListener("lb:addfood", e => { const d = e.detail || {}; const m = d.meta || {}; state.foods.push({id:uid8(), date:today(), name:String(d.name||"Food").slice(0,80), p:num(d.p), c:num(d.c), f:num(d.f), src:m.src, fid:m.fid, qty:m.qty, unit:m.unit, g:m.grams, q:m.q}); commit("Added to today"); });
 $("foodToday").addEventListener("click", e => { const b = e.target.closest("[data-del-food]"); if (b){ state.foods = state.foods.filter(f => f.id !== b.dataset.delFood); commit("Entry deleted"); } });
 $("goalForm").addEventListener("submit", e => { e.preventDefault(); state.goals = {k:num($("gK").value), p:num($("gP").value), c:num($("gC").value), f:num($("gF").value)}; commit("Targets saved"); });

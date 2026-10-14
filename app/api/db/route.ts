@@ -21,8 +21,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ docs: await store.allDocs(col) });
     }
     if (req.nextUrl.searchParams.get("doc") === "state") {
-      const raw = await store.getState(u.id);
-      return NextResponse.json({ exists: raw !== null, data: raw ? JSON.parse(raw) : null });
+      const cur = await store.getState(u.id);
+      return NextResponse.json({ exists: cur !== null, data: cur ? JSON.parse(cur.data) : null, rev: cur?.rev ?? null });
     }
     return fail("Bad request.", 400);
   } catch (e) {
@@ -49,7 +49,12 @@ export async function PUT(req: NextRequest) {
       const s = JSON.stringify(b.data ?? null);
       if (!b.data || typeof b.data !== "object") return fail("invalid_argument", 400);
       if (s.length > MAX_STATE_BYTES) return NextResponse.json({ error: "quota_exceeded" }, { status: 413 });
-      await store.setState(u.id, s);
+      const base = typeof b.base === "string" ? b.base : b.base === null ? null : undefined;
+      const res = await store.putState(u.id, s, base);
+      if (!res.ok) {
+        return NextResponse.json({ error: "conflict", exists: res.current !== null, data: res.current ? JSON.parse(res.current.data) : null, rev: res.current?.rev ?? null }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true, rev: res.rev });
     } else {
       return fail("You can only write your own documents.", 403);
     }
