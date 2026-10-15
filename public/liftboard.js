@@ -47,7 +47,7 @@ const CAT = [
   ["Dumbbell Curl","Arms","DC",[0,.15,.25,.37,.48,.6],{db:1}], ["Hammer Curl","Arms","HC",[0,.17,.28,.4,.52,.63],{db:1}],
   ["Preacher Curl","Arms","PC",[0,.3,.48,.65,.82,1]], ["Concentration Curl","Arms","CC",[0,.12,.2,.3,.4,.5],{db:1}],
   ["Cable Curl","Arms","CBC",[0,.3,.5,.7,.9,1.05]], ["Tricep Pushdown","Arms","TPD",[0,.3,.5,.7,.9,1.1]],
-  ["Skull Crusher","Arms","SK",[0,.25,.4,.55,.7,.85]], ["Overhead Tricep Extension","Arms","OTE",[0,.2,.33,.47,.6,.75],{db:1}],
+  ["Skull Crusher","Arms","SK",[0,.25,.4,.55,.7,.85]], ["Overhead Tricep Extension","Arms","OTE",[0,.2,.33,.47,.6,.75],{db:1}], ["Tricep Extension Machine","Arms","TEM",[0,.3,.5,.72,.95,1.2]],
   ["Wrist Curl","Arms","WC",[0,.25,.4,.55,.7,.85]],
   ["Hanging Leg Raise","Core","HLR",[0,.4,.49,.58,.7,.82],{bw:.35}], ["Ab Wheel Rollout","Core","ABW",[0,.38,.47,.58,.7,.82],{bw:.33}],
   ["Weighted Sit-up","Core","SU",[0,.33,.42,.52,.63,.75],{bw:.3}], ["Cable Crunch","Core","CCR",[0,.5,.8,1.1,1.4,1.7]],
@@ -1297,7 +1297,7 @@ const HITS = {
   "Seated Cable Row":{lats:.9,traps:.8,biceps:.5}, "Face Pull":{shoulders:.8,traps:.9}, "Shrug":{traps:1,forearms:.5},
   "Barbell Curl":{biceps:1,forearms:.5}, "EZ Bar Curl":{biceps:1,forearms:.4}, "Dumbbell Curl":{biceps:1,forearms:.4}, "Hammer Curl":{biceps:.8,forearms:.9},
   "Preacher Curl":{biceps:1,forearms:.3}, "Concentration Curl":{biceps:1,forearms:.3}, "Cable Curl":{biceps:1,forearms:.3},
-  "Tricep Pushdown":{triceps:1}, "Skull Crusher":{triceps:1}, "Overhead Tricep Extension":{triceps:1}, "Wrist Curl":{forearms:1},
+  "Tricep Pushdown":{triceps:1}, "Skull Crusher":{triceps:1}, "Overhead Tricep Extension":{triceps:1}, "Tricep Extension Machine":{triceps:1}, "Wrist Curl":{forearms:1},
   "Hanging Leg Raise":{abs:1,forearms:.3}, "Ab Wheel Rollout":{abs:1,lats:.3,shoulders:.2}, "Weighted Sit-up":{abs:1}, "Cable Crunch":{abs:1},
   "Power Clean":{traps:.8,hamstrings:.7,glutes:.7,quads:.6,shoulders:.4,lowerback:.6}, "Hang Clean":{traps:.9,hamstrings:.6,glutes:.6,forearms:.4,shoulders:.4},
   "Clean and Jerk":{quads:.8,glutes:.7,shoulders:.8,traps:.7,triceps:.5}, "Snatch":{shoulders:.8,traps:.8,quads:.7,glutes:.7,hamstrings:.5,lowerback:.5}
