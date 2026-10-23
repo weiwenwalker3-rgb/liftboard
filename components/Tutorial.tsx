@@ -181,8 +181,8 @@ const STEPS: Step[] = [
     body: () => <p>PRs go on the podiums. <b>Total strength</b> ranks the heaviest lifts and <b>Pound for pound</b> ranks strength for your bodyweight. Take first place to wear the crown.</p>,
   },
   {
-    id: "install", kicker: "Step 6 · Get the app", skip: p => p.installed,
-    title: c => c.plat.mobile ? "Put Liftboard on your home screen" : "Get Liftboard on your phone",
+    id: "install", kicker: "Step 6 · Get the app", skip: p => p.installed || !p.mobile,
+    title: () => "Put Liftboard on your home screen",
     body: c => {
       if (c.plat.ios) return <><p>Add it to your home screen and it works like an app: full screen, its own icon, one tap from the gym floor.</p><IosSteps plat={c.plat} /></>;
       if (c.plat.android) return <>
@@ -191,13 +191,7 @@ const STEPS: Step[] = [
         {c.canInstall ? <p className="tour-dim">Or do it from the menu:</p> : null}
         <AndroidSteps plat={c.plat} />
       </>;
-      return <>
-        <p>Open this site on your phone and add it to your home screen. It then works like an app with its own icon.</p>
-        <div className="tour-cols">
-          <div><h4>iPhone</h4><IosSteps plat={{ ...c.plat, iosBrowser: "safari" }} /></div>
-          <div><h4>Android</h4><AndroidSteps plat={{ ...c.plat, samsung: false }} /></div>
-        </div>
-      </>;
+      return <><p>Add it to your home screen from your browser&apos;s menu and it works like an app with its own icon.</p></>;
     },
   },
   {

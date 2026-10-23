@@ -48,7 +48,7 @@ The Fuel tab searches foods instead of asking for typed macros. Search goes thro
 
 - It starts on a first visit, but not for anyone who already has their own logged sets. Finishing or skipping sets `state.tour.done` (synced with the account) and `liftboard.tour` in localStorage. Profile has a "Replay the tutorial" button.
 - The current step is kept in localStorage, so the tour resumes after the sign-in reload.
-- The home-screen step is hidden when the site is already running as an installed app (standalone display mode). iPhone and Android get their own instructions; desktop gets both.
+- The home-screen step is hidden when the site is already running as an installed app (standalone display mode). It also only shows on phones and tablets; computers skip it. iPhone and Android get their own instructions.
 - The daily-bonus popup waits until the tour is done.
 
 ## Phone app
