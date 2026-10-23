@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { MARKUP } from "@/lib/markup";
 import AuthPanel from "./AuthPanel";
 import FoodSearch from "./FoodSearch";
+import Tutorial from "./Tutorial";
 
 declare global { interface Window { __liftboardLoaded?: boolean } }
 
@@ -36,6 +37,7 @@ export default function Liftboard() {
       <div dangerouslySetInnerHTML={html} suppressHydrationWarning />
       {slot ? createPortal(<AuthPanel />, slot) : null}
       {foodSlot ? createPortal(<FoodSearch />, foodSlot) : null}
+      <Tutorial />
     </>
   );
 }

@@ -42,6 +42,15 @@ The Fuel tab searches foods instead of asking for typed macros. Search goes thro
 - **Restaurants:** import a chain's own published nutrition table: `DATABASE_URL=... npx tsx scripts/import-restaurant.ts --restaurant "Name" --url https://page-it-came-from --published YYYY-MM-DD menu.csv` (columns in `docs/restaurant-template.csv`). Each item keeps its source URL and publish date. No restaurant data is bundled.
 - **Tests:** `npm test` (unit conversions, adapters against recorded-shape fixtures, caching, partial failure, user data, restaurant import).
 
+## First-run tutorial
+
+`components/Tutorial.tsx` is a guided spotlight tour over the real UI: sign in, profile (units, sex, bodyweight, height, age), the sample-data chart, body rank, logging a set, submitting a PR, the leaderboard, adding the site to the home screen, and removing the sample data. It drives the app through `window.lbTour` (defined near the end of `public/liftboard.js`).
+
+- It starts on a first visit, but not for anyone who already has their own logged sets. Finishing or skipping sets `state.tour.done` (synced with the account) and `liftboard.tour` in localStorage. Profile has a "Replay the tutorial" button.
+- The current step is kept in localStorage, so the tour resumes after the sign-in reload.
+- The home-screen step is hidden when the site is already running as an installed app (standalone display mode). iPhone and Android get their own instructions; desktop gets both.
+- The daily-bonus popup waits until the tour is done.
+
 ## Phone app
 
 The site has a web manifest, so "Add to Home Screen" installs it as an app on iOS and Android. A store-listed native app would be a separate wrapper (Capacitor or similar) around this same site.

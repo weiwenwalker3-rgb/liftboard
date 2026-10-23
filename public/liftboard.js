@@ -140,17 +140,21 @@ function save(){
     if (e && e.code === "quota_exceeded") toast("Storage is full. Delete some old entries to keep syncing.");
   });
 }
+let readyFired = false;
+function fireReady(){ if (readyFired) return; readyFired = true; window.__lbReady = true; window.dispatchEvent(new Event("lb:ready")); }
+setTimeout(fireReady, 4000);
 (async function connect(){
-  if (!window.claude || !window.claude.use) return;
+  if (!window.claude || !window.claude.use) return fireReady();
   const [d,u] = await Promise.all([window.claude.use("db"), window.claude.use("user")]);
   user = u;
   if (u){ me = await u.me(); renderChrome(); }
-  if (!d || !u) return;
+  if (!d || !u) return fireReady();
   myId = await u.id();
-  if (!myId) return;
+  if (!myId) return fireReady();
   db = d; cloud = true;
   if (await u.can("data.write") === false) canPost = false;
   db.doc("data/users/"+myId+"/state").onSnapshot(s => {
+    setTimeout(fireReady, 0);
     if (!s.exists || s.metadata.hasPendingWrites) return;
     const data = s.data();
     if (data && data.version === 2){ state = JSON.parse(JSON.stringify(data)); ensureSeen(); try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} if (checkStreak()) save(); applyTheme(); renderAll(); }
@@ -518,6 +522,7 @@ function showDaily(){
   ensureStreak();
   const st = state.streak, ov = $("daily");
   if (st.claimed === today() || dailyShown) return;
+  if (window.__lbTourBusy){ setTimeout(showDaily, 800); return; }  // the tutorial goes first
   dailyShown = true;
   const n = st.count, tone = streakTone(n), m = mileBonus(n);
   embP = "d"; embN = 0;
@@ -1558,6 +1563,7 @@ function renderAll(){
   $("sampleBanner").hidden = !(state.lifts.some(l => l.sample) || state.foods.some(f => f.sample));
   renderChrome();
   ({arena:renderArena, train:renderTrain, fuel:renderFuel, squad:renderSquad, profile:renderProfile})[ui.tab]();
+  window.dispatchEvent(new Event("lb:render"));
 }
 function setTab(t){
   ui.tab = t;
@@ -1626,6 +1632,30 @@ $("clearSample").addEventListener("click", () => { state.lifts = state.lifts.fil
 $("loadSample").addEventListener("click", () => { const s = seed(); state.lifts = state.lifts.filter(l => !l.sample).concat(s.lifts); state.foods = state.foods.filter(f => !f.sample).concat(s.foods); commit("Sample training data loaded"); });
 $("wipe").addEventListener("click", () => { $("wipe").hidden = true; $("wipeYes").hidden = false; });
 $("wipeYes").addEventListener("click", () => { state.lifts = []; state.foods = []; commit("Training data deleted"); });
+/* ---------- tutorial bridge (components/Tutorial.tsx drives the tour through this) ---------- */
+window.lbTour = {
+  info(){
+    const c = calcState();
+    return {signedIn:cloud, name:(me && me.name) || "", unit:unit(), sex:c.sex, bw:Math.round(toU(state.profile.bw)*10)/10, cm:Math.round(c.cm), age:c.age, tag:state.profile.tag || "",
+      hasSample:state.lifts.some(l => l.sample) || state.foods.some(f => f.sample), realLifts:state.lifts.filter(l => !l.sample).length, done:!!(state.tour && state.tour.done)};
+  },
+  setTab,
+  setProfile(p){
+    if (p.unit === "lb" || p.unit === "kg") state.settings.unit = p.unit;
+    const c = calcState();
+    if (p.sex === "m" || p.sex === "f") c.sex = p.sex;
+    const bw = fromU(num(p.bw)); if (bw > 20 && bw < 400){ state.profile.bw = bw; c.bw = bw; }
+    if (num(p.cm) > 100 && num(p.cm) < 250) c.cm = num(p.cm);
+    if (num(p.age) >= 13 && num(p.age) <= 99) c.age = Math.round(num(p.age));
+    if (typeof p.tag === "string") state.profile.tag = p.tag.trim().slice(0,20);
+    commit("Profile saved");
+  },
+  openClaim(){ if ($("claim").hidden){ $("claim").hidden = false; prefillClaim(); renderArena(); } },
+  closeClaim(){ if (!$("claim").hidden){ $("claim").hidden = true; renderArena(); } },
+  loadSample(){ $("loadSample").click(); },
+  clearSample(){ $("clearSample").click(); },
+  finish(){ state.tour = {done:today()}; save(); },
+};
 mq.addEventListener("change", renderCharts);
 let rz; new ResizeObserver(() => { clearTimeout(rz); rz = setTimeout(renderCharts, 60); }).observe(document.body);
 
