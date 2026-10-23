@@ -181,7 +181,28 @@ const STEPS: Step[] = [
     body: () => <p>PRs go on the podiums. <b>Total strength</b> ranks the heaviest lifts and <b>Pound for pound</b> ranks strength for your bodyweight. Take first place to wear the crown.</p>,
   },
   {
-    id: "install", kicker: "Step 6 · Get the app", skip: p => p.installed || !p.mobile,
+    id: "macros", tab: "fuel", target: () => [$("#todayTitle"), $("#bars")], kicker: "Step 6 · Fuel",
+    title: () => "Fuel your gains",
+    body: () => <>
+      <p>The <b>Fuel</b> tab tracks what you eat. These bars fill up as you log food and show how close you are to today&apos;s calorie, protein, carb and fat targets.</p>
+      <p>Each day you finish scores out of 100 for how close you land.</p>
+    </>,
+  },
+  {
+    id: "food", tab: "fuel", target: () => [$("#foodSlot")], kicker: "Step 6 · Fuel",
+    title: () => "Log your food",
+    body: () => <>
+      <p>Search a food like <b>chicken breast</b> or <b>white rice</b>, pick how much you had, and add it to today. The macros are filled in for you.</p>
+      <p>Tick the box to include packaged and brand-name products, or use the <b>Restaurants</b> tab. Foods you log often show up under <b>Recent</b> and <b>Favorites</b>.</p>
+    </>,
+  },
+  {
+    id: "calc", tab: "fuel", target: () => [card("#calcForm")], kicker: "Step 6 · Fuel",
+    title: () => "Set your targets",
+    body: () => <p>Not sure what to eat? The <b>macro calculator</b> uses the stats you entered to estimate your calories. Pick <b>Cut</b>, <b>Maintain</b> or <b>Lean bulk</b>, then tap <b>Use these as my targets</b>.</p>,
+  },
+  {
+    id: "install", kicker: "Step 7 · Get the app", skip: p => p.installed || !p.mobile,
     title: () => "Put Liftboard on your home screen",
     body: c => {
       if (c.plat.ios) return <><p>Add it to your home screen and it works like an app: full screen, its own icon, one tap from the gym floor.</p><IosSteps plat={c.plat} /></>;
@@ -195,7 +216,7 @@ const STEPS: Step[] = [
     },
   },
   {
-    id: "sample", target: () => [visible($("#sampleBanner")) ? $("#sampleBanner") : null], kicker: "Step 7 · Clear the decks",
+    id: "sample", target: () => [visible($("#sampleBanner")) ? $("#sampleBanner") : null], kicker: "Step 8 · Clear the decks",
     title: c => c.info.hasSample ? "Turn off the sample data" : "Sample data is off",
     body: c => c.info.hasSample ? <>
       <p>The sample lifter has done their job. Remove their sets and meals so everything you see is yours.</p>

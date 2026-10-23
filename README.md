@@ -44,7 +44,7 @@ The Fuel tab searches foods instead of asking for typed macros. Search goes thro
 
 ## First-run tutorial
 
-`components/Tutorial.tsx` is a guided spotlight tour over the real UI: sign in, profile (units, sex, bodyweight, height, age), the sample-data chart, body rank, logging a set, submitting a PR, the leaderboard, adding the site to the home screen, and removing the sample data. It drives the app through `window.lbTour` (defined near the end of `public/liftboard.js`).
+`components/Tutorial.tsx` is a guided spotlight tour over the real UI: sign in, profile (units, sex, bodyweight, height, age), the sample-data chart, body rank, logging a set, submitting a PR, the leaderboard, the Fuel tab (macro bars, food search, macro calculator), adding the site to the home screen, and removing the sample data. It drives the app through `window.lbTour` (defined near the end of `public/liftboard.js`).
 
 - It starts on a first visit, but not for anyone who already has their own logged sets. Finishing or skipping sets `state.tour.done` (synced with the account) and `liftboard.tour` in localStorage. Profile has a "Replay the tutorial" button.
 - The current step is kept in localStorage, so the tour resumes after the sign-in reload.
