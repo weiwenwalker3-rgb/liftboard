@@ -5,6 +5,7 @@ import * as store from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function POST(req: NextRequest) {
   const b = await req.json().catch(() => ({}));

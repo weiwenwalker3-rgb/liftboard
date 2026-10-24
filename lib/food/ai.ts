@@ -90,7 +90,7 @@ export function answerToFood(a: AiAnswer): Food | null {
 type Ask = (q: string) => Promise<AiAnswer | null>;
 
 async function askClaude(q: string): Promise<AiAnswer | null> {
-  const client = new Anthropic({ timeout: 20_000, maxRetries: 1 });
+  const client = new Anthropic({ timeout: 20_000, maxRetries: 1, fetchOptions: { cache: "no-store" } });
   const res = await client.messages.create({
     model: AI_MODEL,
     max_tokens: 400,

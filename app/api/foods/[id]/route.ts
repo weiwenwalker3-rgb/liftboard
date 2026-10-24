@@ -3,6 +3,7 @@ import { getFood } from "@/lib/food/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function GET(_req: Request, { params }: { params: { id: string } }) {
   const food = await getFood(decodeURIComponent(params.id));

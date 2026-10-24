@@ -5,6 +5,7 @@ import { getFood } from "@/lib/food/catalog";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const bad = (m: string, s = 400) => NextResponse.json({ error: m }, { status: s });
 

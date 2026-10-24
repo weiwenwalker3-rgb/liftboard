@@ -19,7 +19,7 @@ const g = globalThis as unknown as {
 };
 const mem = (g.__lb ??= { users: new Map(), docs: new Map(), states: new Map() });
 
-const sql = DB_URL ? neon(DB_URL) : null;
+const sql = DB_URL ? neon(DB_URL, { fetchOptions: { cache: "no-store" } }) : null; // no-store: see lib/food/db.ts
 
 function ready(): Promise<void> {
   if (!sql) return Promise.resolve();

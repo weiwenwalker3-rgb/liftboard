@@ -2,7 +2,8 @@
 import { neon } from "@neondatabase/serverless";
 
 const DB_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || "";
-export const foodSql = DB_URL ? neon(DB_URL) : null;
+// no-store: Next.js otherwise caches identical query fetches and replays stale rows (and skips writes).
+export const foodSql = DB_URL ? neon(DB_URL, { fetchOptions: { cache: "no-store" } }) : null;
 
 const g = globalThis as unknown as { __lbFoodReady?: Promise<void> };
 

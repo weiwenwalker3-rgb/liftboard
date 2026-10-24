@@ -5,6 +5,7 @@ import * as store from "@/lib/store";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 const COLLECTIONS = new Set(["prs", "social"]);
 const isCol = (c: string): c is "prs" | "social" => COLLECTIONS.has(c);

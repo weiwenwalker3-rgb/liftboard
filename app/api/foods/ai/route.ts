@@ -4,6 +4,7 @@ import { limited, tooMany } from "@/lib/food/http";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const fetchCache = "force-no-store";
 
 export async function GET(req: Request) {
   if (limited(req, "ai", 20)) return tooMany();
