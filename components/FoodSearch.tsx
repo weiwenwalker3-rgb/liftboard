@@ -18,7 +18,7 @@ async function api(body: Record<string, unknown>) {
 }
 
 type Resp = { foods: Food[]; total: number; page: number; notices: string[]; error?: string };
-const SRC: Record<string, string> = { usda: "USDA", off: "Open Food Facts", restaurant: "Restaurant", user: "Mine" };
+const SRC: Record<string, string> = { usda: "USDA", off: "Open Food Facts", restaurant: "Restaurant", user: "Mine", ai: "AI estimate" };
 
 const UNITS_G: { v: Unit; l: string }[] = [{ v: "g", l: "g" }, { v: "oz", l: "oz" }, { v: "cup", l: "cup" }, { v: "tbsp", l: "tbsp" }, { v: "tsp", l: "tsp" }];
 const UNITS_ML: { v: Unit; l: string }[] = [{ v: "ml", l: "ml" }, { v: "floz", l: "fl oz" }, { v: "cup", l: "cup" }, { v: "tbsp", l: "tbsp" }, { v: "tsp", l: "tsp" }];
@@ -51,6 +51,9 @@ export default function FoodSearch() {
   const [showNew, setShowNew] = useState(false);
   const [packaged, setPackaged] = useState(false);
   const ctl = useRef<AbortController | null>(null);
+  const [ai, setAi] = useState<Food | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiNote, setAiNote] = useState("");
 
   useEffect(() => {
     fetch("/api/me").then(r => r.json()).then(j => setSignedIn(!!j.user)).catch(() => setSignedIn(false));
@@ -87,6 +90,24 @@ export default function FoodSearch() {
     const id = setTimeout(() => run(t, 1, false, tab === "restaurants" ? "restaurant" : "", packaged), 300);
     return () => clearTimeout(id);
   }, [q, run, tab, packaged]);
+
+  // Quick answer: waits for a pause in typing so half-typed words don't each cost a model call.
+  useEffect(() => {
+    const t = q.trim();
+    setAi(null); setAiNote("");
+    if (tab !== "search" || t.replace(/[^a-z]/gi, "").length < 3) { setAiBusy(false); return; }
+    const c = new AbortController();
+    setAiBusy(true);
+    const id = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/foods/ai?q=${encodeURIComponent(t)}`, { signal: c.signal });
+        const j = await r.json();
+        setAi(r.ok ? (j.food as Food | null) : null); setAiNote(j.notice || "");
+      } catch (e) { if ((e as Error).name === "AbortError") return; setAi(null); }
+      setAiBusy(false);
+    }, 800);
+    return () => { clearTimeout(id); c.abort(); };
+  }, [q, tab]);
 
   const loadList = useCallback(async (t: Tab) => {
     setErr(""); setNotices([]); setBusy(true);
@@ -227,6 +248,8 @@ export default function FoodSearch() {
               </form>
             ) : <button type="button" className="btn" onClick={() => setShowNew(true)}>+ New food</button>
           ) : null}
+          {tab === "search" && (ai || aiBusy || aiNote) ? <AiCard food={ai} busy={aiBusy} note={aiNote} onOpen={() => ai && setSel(ai)} /> : null}
+          {tab === "search" && ai && foods.length ? <p className="hint fs-sub">Database matches</p> : null}
           <ul className="fs-list">
             {foods.map(f => {
               const p = previewOf(f);
@@ -255,8 +278,8 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
   const units = food.base === "ml" ? UNITS_ML : UNITS_G;
   const cook = useMemo(() => cookInfo(food), [food]);
   const first = defaultServing(food);
-  // Simple ingredients default to grams so the raw/cooked switch is available straight away.
-  const startInGrams = !first || (!!cook && food.base === "g");
+  // Simple ingredients default to grams so the raw/cooked switch is available straight away (AI answers keep their serving).
+  const startInGrams = !first || (!!cook && food.base === "g" && food.source !== "ai");
   const [amount, setAmount] = useState(startInGrams ? "100" : "1");
   const [unit, setUnit] = useState<string>(!startInGrams ? "s0" : food.base === "ml" ? "ml" : "g");
   const [weighed, setWeighed] = useState<CookState>(cook?.state ?? "raw");
@@ -326,12 +349,28 @@ function Detail({ food, fav, signedIn, onFav, onClose, onLogged, onMeal }: { foo
       ) : <p className="hint">Enter a quantity.</p>}
       {calc?.converted && cook ? <p className="hint fs-note">Estimated: converted from {weighed} to {cook.state} weight with a typical yield (cooked is about ×{cook.yield} of raw).</p> : calc?.est ? <p className="hint fs-note">Estimated: converting between weight and volume assumes water density.</p> : null}
       {food.quality === "complete" && food.qualityNote ? <p className="hint">{food.qualityNote}.</p> : null}
-      {food.quality !== "complete" ? <p className="hint fs-note">{food.quality === "incomplete" ? "Incomplete data" : "Estimated data"}{food.qualityNote ? `: ${food.qualityNote}` : ""}. Check the label.</p> : null}
-      <p className="hint">Source: {SRC[food.source]}{food.sourceUrl ? <> · <a href={food.sourceUrl} target="_blank" rel="noreferrer noopener">view record</a></> : null} · updated {food.updatedAt.slice(0, 10)}</p>
+      {food.source === "ai" ? <p className="hint fs-note">{food.qualityNote ? food.qualityNote + " " : ""}Typical values estimated by AI. Packaged foods can differ, so check the label when you have it.</p> : null}
+      {food.quality !== "complete" && food.source !== "ai" ? <p className="hint fs-note">{food.quality === "incomplete" ? "Incomplete data" : "Estimated data"}{food.qualityNote ? `: ${food.qualityNote}` : ""}. Check the label.</p> : null}
+      <p className="hint">Source: {SRC[food.source]}{food.source === "ai" ? " (Claude)" : ""}{food.sourceUrl ? <> · <a href={food.sourceUrl} target="_blank" rel="noreferrer noopener">view record</a></> : null} · updated {food.updatedAt.slice(0, 10)}</p>
       <div className="fs-row">
         <button type="button" className="btn go" onClick={add} disabled={!calc || calc.m.kcal + calc.m.protein + calc.m.carbs + calc.m.fat === 0}>Add to today</button>
         <button type="button" className="btn" onClick={addToMeal} disabled={!calc}>Add to meal</button>
       </div>
     </div>
+  );
+}
+
+function AiCard({ food, busy, note, onOpen }: { food: Food | null; busy: boolean; note: string; onOpen: () => void }) {
+  if (!food) return busy ? <div className="fs-ai fs-ai-wait" aria-live="polite"><span className="fs-ai-tag">Quick answer</span><span className="hint">Looking it up…</span></div> : note ? <p className="hint fs-note">{note}</p> : null;
+  const p = previewOf(food);
+  return (
+    <button type="button" className="fs-ai" onClick={onOpen} aria-label={`Quick answer: ${food.name}. Open to log`}>
+      <span className="fs-ai-tag">Quick answer</span>
+      <span className="fs-ai-name">{food.name}{food.brand ? <em> · {food.brand}</em> : null}</span>
+      <span className="fs-ai-serv">{p.label}</span>
+      <span className="fs-ai-macros"><b>{p.kcal}</b> kcal<i>P {p.protein} g</i><i>C {p.carbs} g</i><i>F {p.fat} g</i></span>
+      {food.qualityNote ? <span className="fs-ai-note">{food.qualityNote}</span> : null}
+      <span className="fs-ai-go">Log this →</span>
+    </button>
   );
 }

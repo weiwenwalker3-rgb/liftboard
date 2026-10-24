@@ -826,6 +826,18 @@ details.lranks[open] .chev{transform:rotate(90deg)}
 .fs-badges b{font-size:11px;font-weight:600;margin-right:6px;padding:1px 6px;border-radius:6px;background:var(--surface);color:var(--muted)}
 .fs-badges b.warn,.warnt{color:#e0a030}
 .fs-note{color:#e0a030}.fs-err{color:#e5484d}
+.fs-ai{position:relative;width:100%;margin:10px 0 0;text-align:left;display:grid;gap:3px;padding:12px 14px;border-radius:12px;border:2px solid var(--gold);background:linear-gradient(135deg,var(--surface-2),var(--surface));color:inherit;font:inherit;cursor:pointer;box-shadow:var(--shadow)}
+.fs-ai:hover,.fs-ai:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.fs-ai-wait{cursor:default;border-style:dashed;animation:fsAiPulse 1.2s ease-in-out infinite}
+@keyframes fsAiPulse{50%{opacity:.6}}
+@media (prefers-reduced-motion:reduce){.fs-ai-wait{animation:none}}
+.fs-ai-tag{justify-self:start;font:700 11px/1 var(--f-display);letter-spacing:.06em;text-transform:uppercase;color:var(--on-gold);background:var(--gold);padding:4px 7px;border-radius:6px}
+.fs-ai-name{font-weight:700;font-size:16px}.fs-ai-name em{font-weight:400;color:var(--muted)}
+.fs-ai-serv{color:var(--muted);font-size:13px}
+.fs-ai-macros{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline}.fs-ai-macros b{font:22px var(--f-display)}.fs-ai-macros i{font-style:normal;color:var(--muted)}
+.fs-ai-note{font-size:13px;color:var(--warn)}
+.fs-ai-go{justify-self:end;font-weight:700;color:var(--gold-ink);font-size:13px}
+.fs-sub{margin:12px 0 0;font-weight:600}
 .fs-det{display:grid;gap:8px;margin-top:10px}
 .fs-det h4{margin:0;font-size:16px}
 .fs-det input{width:90px}.fs-det select{flex:1 1 160px}

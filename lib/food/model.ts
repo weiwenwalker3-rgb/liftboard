@@ -1,7 +1,7 @@
 // Normalized food model shared by every source (USDA, Open Food Facts, restaurants, user foods).
 // Nutrient values are stored per 100 g (solids) or per 100 ml (liquids): see `base`.
 
-export type FoodSource = "usda" | "off" | "restaurant" | "user";
+export type FoodSource = "usda" | "off" | "restaurant" | "user" | "ai";
 export type DataQuality = "complete" | "incomplete" | "estimated";
 
 export interface Serving {

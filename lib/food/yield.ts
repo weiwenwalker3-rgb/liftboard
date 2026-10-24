@@ -24,7 +24,7 @@ export interface Cook { state: CookState; yield: number }
 
 /** Returns the food's own state and cooked/raw yield, or null when the food is not a simple ingredient we can convert. */
 export function cookInfo(f: Pick<Food, "name" | "source" | "category" | "nutrients">): Cook | null {
-  if (f.source !== "usda" && f.source !== "off") return null;
+  if (f.source !== "usda" && f.source !== "off" && f.source !== "ai") return null;
   const n = f.name.toLowerCase();
   if (/(soup|sauce|salad|sandwich|burrito|bowl|pizza|nugget|tender|breaded|fried rice|casserole|bar\b|cereal|chips?|cracker|snack|dinner|meal|stuffed|seasoned|flavored|microwave)/.test(n)) return null;
   const hit = YIELDS.find(y => y.re.test(n));
