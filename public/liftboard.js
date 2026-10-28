@@ -38,6 +38,7 @@ const CAT = [
   ["Chest Fly","Push","FLY",[0,.12,.2,.28,.36,.45],{db:1}], ["Lateral Raise","Push","LR",[0,.08,.13,.18,.24,.3],{db:1}],
   ["Dips","Push","DIP",[0,1.1,1.4,1.75,2.1,2.4],{bw:1}], ["Push-ups","Push","PU",[0,.87,1.19,1.52,1.84,2.17],{bw:.65}],
   ["Pull-ups","Pull","PLU",[0,1.1,1.33,1.6,1.83,2.07],{bw:1}], ["Chin-ups","Pull","CHU",[0,1.13,1.37,1.65,1.9,2.13],{bw:1}],
+  ["Assisted Pull-ups","Pull","APU",[0,.5,.65,.8,.92,1.03],{bw:1,as:1}],
   ["Muscle-ups","Pull","MU",[0,1.03,1.17,1.33,1.5,1.67],{bw:1}], ["Inverted Row","Pull","IR",[0,.8,1,1.2,1.4,1.6],{bw:.6}],
   ["Barbell Row","Pull","BR",[0,.65,.95,1.2,1.5,1.75]], ["Pendlay Row","Pull","PR",[0,.6,.9,1.15,1.4,1.65]],
   ["T-Bar Row","Pull","TBR",[0,.7,1,1.3,1.6,1.9]], ["Dumbbell Row","Pull","DBR",[0,.3,.5,.7,.9,1.05],{db:1}],
@@ -59,7 +60,7 @@ const GROUPS = ["Legs","Push","Pull","Arms","Core","Olympic"];
 // a single lift at or above these multiples of bodyweight is elite and needs a video to count
 const ELITE = {"Squat":2.5, "Bench Press":1.75, "Deadlift":3};
 // practice rivals, in lb: tag, bodyweight, squat, bench, deadlift
-CAT.forEach(([n, g, sym, m, o]) => { if (m && !RANK_MIN[n]) RANK_MIN[n] = m; EX[n] = {n, g, sym, f:(o && o.bw) || 0, db:!!(o && o.db)}; });
+CAT.forEach(([n, g, sym, m, o]) => { if (m && !RANK_MIN[n]) RANK_MIN[n] = m; EX[n] = {n, g, sym, f:(o && o.bw) || 0, db:!!(o && o.db), as:!!(o && o.as)}; });
 const BOTS = [];
 
 /* ---------- helpers ---------- */
@@ -217,7 +218,7 @@ async function resolvePeople(list){
 function series(ex, metric){
   const byDay = {};
   state.lifts.filter(l => l.ex === ex).forEach(l => {
-    const v = metric === "e1rm" ? e1rm(load(l),l.reps) : metric === "top" ? l.kg : l.kg*l.reps*l.sets;
+    const v = metric === "e1rm" ? e1rm(load(l),l.reps) : metric === "top" ? (EX[ex] && EX[ex].as ? load(l) : l.kg) : (EX[ex] && EX[ex].as ? load(l) : l.kg)*l.reps*l.sets;
     const cur = byDay[l.date];
     if (metric === "vol"){ if (cur){ cur.v += v; cur.n++; } else byDay[l.date] = {t:parse(l.date), v, set:l, n:1}; }
     else if (!cur || v > cur.v) byDay[l.date] = {t:parse(l.date), v, set:l};
@@ -225,14 +226,16 @@ function series(ex, metric){
   return Object.values(byDay).sort((a,b) => a.t - b.t);
 }
 const inRange = (pts, days) => days ? pts.filter(p => p.t >= parse(today()) - days*DAY) : pts;
-const load = (l, bw) => EX[l.ex] && EX[l.ex].f ? EX[l.ex].f*(bw || state.profile.bw) + l.kg : l.kg;
+const load = (l, bw) => { const e = EX[l.ex]; if (!e || !e.f) return l.kg; const b = e.f*(bw || state.profile.bw); return e.as ? Math.max(0, b - l.kg) : b + l.kg; };
 const best = ex => state.lifts.reduce((b,l) => l.ex === ex ? Math.max(b, e1rm(load(l),l.reps)) : b, 0);
-const setTxt = l => EX[l.ex] && EX[l.ex].f ? (l.kg > 0 ? "BW+" + W(l.kg) : "BW") : W(l.kg);
+const setTxt = l => EX[l.ex] && EX[l.ex].f ? (l.kg > 0 ? (EX[l.ex].as ? "BW\u2212" : "BW+") + W(l.kg) : "BW") : W(l.kg);
 function bestSet(ex){ let b = null, v = 0; state.lifts.forEach(l => { if (l.ex === ex){ const e = e1rm(load(l), l.reps); if (e > v){ v = e; b = l; } } }); return b ? {set:b, e1:v} : null; }
 function logRank(ex){ const b = bestSet(ex); if (!b || !RANK_MIN[ex]) return null; const rk = rankFor(ex, b.e1, state.profile.bw); return rk && Object.assign(rk, {set:b.set, e1:b.e1}); }
 // what it takes to reach ratio r (× bodyweight) on lift ex at bodyweight bw
 function needFor(ex, r, bw, reps){
   const f = EX[ex] && EX[ex].f, tgt = r*bw;
+  // assisted moves: the most assistance you can use and still reach r
+  if (f && EX[ex].as) return f*bw - (reps <= 1 ? tgt : tgt/(1 + reps/30));
   if (f){ if (reps === "bw") return Math.max(1, Math.ceil(30*(tgt/(f*bw) - 1))); return Math.max(0, tgt/(1 + (reps - 1 ? reps/30 : 0)) - f*bw); }
   return reps <= 1 ? tgt : tgt/(1 + reps/30);
 }
@@ -1200,7 +1203,7 @@ function renderTrain(){
   document.querySelectorAll("#metricSeg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.v === ui.metric));
   document.querySelectorAll("#rangeSeg button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.v === ui.range));
   const sets = state.lifts.filter(l => l.ex === ui.ex);
-  const bs = sets.reduce((b,l) => !b || e1rm(l.kg,l.reps) > e1rm(b.kg,b.reps) ? l : b, null);
+  const bs = sets.reduce((b,l) => !b || e1rm(load(l),l.reps) > e1rm(load(b),b.reps) ? l : b, null);
   $("cFoot").innerHTML = bs ? `<span>Best est. 1RM <b>${WU(e1rm(load(bs),bs.reps))}</b> (${setTxt(bs)} × ${bs.reps}, ${shortDate(parse(bs.date))})</span><span>Ratio <b>${(best(ui.ex)/state.profile.bw).toFixed(2)}× BW</b></span><span>Sessions in range <b>${pts.length}</b></span>` : "<span>No sets yet for this lift.</span>";
   lfLabel();
   if (!$("lfW").value) $("lfW").value = unit() === "kg" ? 100 : 225;
@@ -1296,7 +1299,7 @@ const HITS = {
   "Push Press":{shoulders:1,triceps:.6,quads:.3,traps:.4}, "Dumbbell Shoulder Press":{shoulders:1,triceps:.5}, "Arnold Press":{shoulders:1,triceps:.4},
   "Machine Chest Press":{chest:1,triceps:.5,shoulders:.4}, "Chest Fly":{chest:1,shoulders:.3}, "Lateral Raise":{shoulders:1,traps:.3},
   "Dips":{triceps:1,chest:.8,shoulders:.5}, "Push-ups":{chest:1,triceps:.6,shoulders:.5,abs:.3},
-  "Pull-ups":{lats:1,biceps:.6,forearms:.5,traps:.3,abs:.2}, "Chin-ups":{lats:1,biceps:.8,forearms:.5}, "Muscle-ups":{lats:1,triceps:.6,chest:.4,biceps:.5,forearms:.5,shoulders:.4},
+  "Pull-ups":{lats:1,biceps:.6,forearms:.5,traps:.3,abs:.2}, "Assisted Pull-ups":{lats:.7,biceps:.45,forearms:.3,traps:.2}, "Chin-ups":{lats:1,biceps:.8,forearms:.5}, "Muscle-ups":{lats:1,triceps:.6,chest:.4,biceps:.5,forearms:.5,shoulders:.4},
   "Inverted Row":{lats:.8,traps:.7,biceps:.5}, "Barbell Row":{lats:1,traps:.7,biceps:.5,lowerback:.5,forearms:.4}, "Pendlay Row":{lats:1,traps:.7,biceps:.5,lowerback:.5,forearms:.4},
   "T-Bar Row":{lats:1,traps:.7,biceps:.5,lowerback:.4}, "Dumbbell Row":{lats:1,biceps:.5,traps:.5,forearms:.3}, "Lat Pulldown":{lats:1,biceps:.6},
   "Seated Cable Row":{lats:.9,traps:.8,biceps:.5}, "Face Pull":{shoulders:.8,traps:.9}, "Shrug":{traps:1,forearms:.5},
@@ -1409,7 +1412,7 @@ function renderBodySel(){
           ${M.todo.length ? `<div class="br-todo"><span>Rank up with</span>${M.todo.slice(0,4).map(l => `<button type="button" class="chip" data-rk="${esc(l)}">${esc(l)}</button>`).join("")}</div>` : ""}`);
   setHTML($("brList"), MUSCLES.map(([k]) => { const x = B.m[k]; return `<button type="button" data-m="${k}" aria-pressed="${k === ui.muscle}" style="${x.rk ? `--rc:${RANKS[x.rk.i].c1}` : ""}"><i></i>${esc(x.name)}<small>${x.rk ? esc(x.rk.label) : "—"}</small></button>`; }).join(""));
 }
-function lfLabel(){ const e = EX[$("lfEx").value]; $("lfWl").textContent = e && e.f ? `Added weight (${unit()}, 0 = bodyweight)` : e && e.db ? `Weight per dumbbell (${unit()})` : `Weight (${unit()})`; $("lfW").min = 0; }
+function lfLabel(){ const e = EX[$("lfEx").value]; $("lfWl").textContent = e && e.as ? `Assistance (${unit()}, 0 = none)` : e && e.f ? `Added weight (${unit()}, 0 = bodyweight)` : e && e.db ? `Weight per dumbbell (${unit()})` : `Weight (${unit()})`; $("lfW").min = 0; }
 function renderLiftRanks(gridOnly){
   if (!gridOnly) renderBody();
   const bw = state.profile.bw, G = ui.rkGroup || "All", q = (ui.rkQ || "").trim().toLowerCase();
@@ -1429,22 +1432,23 @@ function renderLiftRanks(gridOnly){
     : `<p class="hint">${q ? "No lifts match \u201c" + esc(ui.rkQ.trim()) + "\u201d." : "No ranked lifts yet. Log a set of any lift to rank it."}</p>`);
 
   const ex = ui.rkEx, e = EX[ex], rk = logRank(ex), f = e.f;
-  const cols = f ? [["bw","Reps at BW"],[1,"Added ×1"],[5,"Added ×5"]] : [[1,"1 rep"],[5,"5 reps"],[10,"10 reps"]];
-  const cell = (r, c) => { if (c === "bw"){ const n = needFor(ex, r, bw, "bw"); return r === 0 ? "1+" : n > 60 ? "60+" : n; } const v = needFor(ex, r, bw, c); return r === 0 ? (f ? "Bodyweight" : "Any") : f && v <= 0 ? "Bodyweight" : WU(v); };
+  const as = e.as, cols = as ? [[1,"Assist ×1"],[5,"Assist ×5"],[10,"Assist ×10"]] : f ? [["bw","Reps at BW"],[1,"Added ×1"],[5,"Added ×5"]] : [[1,"1 rep"],[5,"5 reps"],[10,"10 reps"]];
+  const cell = (r, c) => { if (as){ const v = needFor(ex, r, bw, c); return r === 0 ? "Any" : v <= 0 ? "None" : "≤ " + WU(v); } if (c === "bw"){ const n = needFor(ex, r, bw, "bw"); return r === 0 ? "1+" : n > 60 ? "60+" : n; } const v = needFor(ex, r, bw, c); return r === 0 ? (f ? "Bodyweight" : "Any") : f && v <= 0 ? "Bodyweight" : WU(v); };
   const nt = rk && nextTier(rk);
   const nextTxt = !rk ? `Log any set of ${ex.toLowerCase()} to get ranked.` : !nt ? "Elite 3. The top of the ladder." :
-    f ? `Next: ${nt.label} at ${needFor(ex, nt.ratio, bw, "bw")} reps at bodyweight${needFor(ex, nt.ratio, bw, 5) > 0 ? `, or ${WU(needFor(ex, nt.ratio, bw, 5))} added for 5` : ""}.`
+    as ? `Next: ${nt.label} with at most ${needFor(ex, nt.ratio, bw, 5) > 0 ? WU(needFor(ex, nt.ratio, bw, 5)) + " of assistance for 5" : "no assistance for 5"}${needFor(ex, nt.ratio, bw, 10) > 0 ? `, or ${WU(needFor(ex, nt.ratio, bw, 10))} for 10` : ""}. Less assistance ranks higher.`
+    : f ? `Next: ${nt.label} at ${needFor(ex, nt.ratio, bw, "bw")} reps at bodyweight${needFor(ex, nt.ratio, bw, 5) > 0 ? `, or ${WU(needFor(ex, nt.ratio, bw, 5))} added for 5` : ""}.`
       : `Next: ${nt.label} at ${WU(needFor(ex, nt.ratio, bw, 1))} for 1, ${WU(needFor(ex, nt.ratio, bw, 5))} for 5 or ${WU(needFor(ex, nt.ratio, bw, 10))} for 10.`;
   embP = "rd"; embN = 0;
   setHTML($("lrDet"), `<div class="lrd-top"><div class="lrd-e">${rk ? emblem(rk.i, 78, false, rk.tier) : emblem(0, 78, true, 0)}</div>
-      <div style="min-width:0"><div class="label">${esc(e.g)}${e.db ? " · per dumbbell" : ""}${f ? " · bodyweight move" : ""}</div><h3 style="margin:2px 0 4px">${esc(ex)}</h3>
+      <div style="min-width:0"><div class="label">${esc(e.g)}${e.db ? " · per dumbbell" : ""}${as ? " · assisted bodyweight move" : f ? " · bodyweight move" : ""}</div><h3 style="margin:2px 0 4px">${esc(ex)}</h3>
       <div class="lrd-rk" style="${rk ? `color:${RANKS[rk.i].c1 === "#f4f7fb" ? "var(--fg)" : "var(--fg)"}` : ""}">${rk ? `<b>${esc(rk.label)}</b> · ${rk.ratio.toFixed(2)}× BW est. 1RM` : "Unranked"}</div>
-      ${rk ? `<div class="muted" style="font-size:13px">Best set ${setTxt(rk.set)} × ${rk.set.reps} on ${shortDate(parse(rk.set.date))} → ${WU(rk.e1)} est. 1RM${f ? " incl. bodyweight" : ""}</div>` : ""}</div></div>
+      ${rk ? `<div class="muted" style="font-size:13px">Best set ${setTxt(rk.set)} × ${rk.set.reps} on ${shortDate(parse(rk.set.date))} → ${WU(rk.e1)} est. 1RM${as ? " after assistance" : f ? " incl. bodyweight" : ""}</div>` : ""}</div></div>
     <p class="lrd-next">${nextTxt}</p>
     <div class="tbl-wrap"><table class="lrd-tbl"><thead><tr><th>Rank</th>${cols.map(c => `<th class="r">${c[1]}</th>`).join("")}</tr></thead><tbody>
       ${RANK_MIN[ex].map((m, i) => `<tr class="${rk && rk.i === i ? "cur" : ""}"><td><span class="lrd-dot" style="background:linear-gradient(135deg,${RANKS[i].c1},${RANKS[i].c2})"></span>${RANKS[i].name}</td>${cols.map(c => `<td class="r mono">${cell(m, c[0])}</td>`).join("")}</tr>`).join("")}
     </tbody></table></div>
-    <p class="hint">For your bodyweight of ${WU(bw)}.${e.db ? " Weights are per dumbbell." : ""} Each rank splits into tiers 1 to 3 on the way to the next.</p>
+    <p class="hint">For your bodyweight of ${WU(bw)}.${e.db ? " Weights are per dumbbell." : ""}${as ? " Columns show the most assistance you can use for that rank." : ""} Each rank splits into tiers 1 to 3 on the way to the next.</p>
     <button class="btn go" type="button" data-logit="${esc(ex)}">Log a set</button>`);
 }
 const drawMain = () => { const pts = inRange(series(ui.ex, ui.metric), ui.range).map(p => Object.assign({}, p, {v:toU(p.v)})), t1 = parse(today()); mainGeo = drawChart($("mainChart"), pts, {t0: ui.range ? t1 - ui.range*DAY : undefined, t1}); };
@@ -1470,7 +1474,7 @@ $("mainChart").addEventListener("mousemove", hover);
 $("mainChart").addEventListener("touchmove", hover, {passive:true});
 $("mainChart").addEventListener("touchstart", hover, {passive:true});
 $("mainChart").addEventListener("mouseleave", () => { drawMain(); $("tip").hidden = true; });
-function liftHint(){ const w = fromU(num($("lfW").value)), r = num($("lfR").value); $("lfHint").textContent = w && r ? `Estimated 1RM for this set: ${WU(e1rm(w,r))}. Your best is ${WU(best($("lfEx").value))}.` : ""; }
+function liftHint(){ const ex = $("lfEx").value, r = num($("lfR").value), w = EX[ex] && EX[ex].f ? load({ex, kg:Math.max(0, fromU(num($("lfW").value)))}) : fromU(num($("lfW").value)); $("lfHint").textContent = w && r ? `Estimated 1RM for this set: ${WU(e1rm(w,r))}. Your best is ${WU(best($("lfEx").value))}.` : ""; }
 
 /* ---------- fuel ---------- */
 function renderFuel(){
@@ -1605,7 +1609,7 @@ $("liftForm").addEventListener("submit", e => {
   if (bAfter.rk && (!bBefore.rk || bAfter.rk.score > bBefore.rk.score)) bq.push({kind: !bBefore.rk ? "unlock" : bAfter.rk.i > bBefore.rk.i ? "rank" : "tier", rk:bAfter.rk, prev:bBefore.rk, lift:"Body", pfFrom:0, pfTo:0, note:`Your overall body rank is now ${bAfter.rk.label}.`});
   if (bq.length) setTimeout(() => celebrate(bq.slice(-3)), 400);
   if (after && (!before || after.score > before.score)){
-    const how = bwMove ? `${l.kg > 0 ? "Bodyweight + " + WU(l.kg) : "Bodyweight"} for ${l.reps} rep${l.reps === 1 ? "" : "s"}` : `${WU(l.kg)} for ${l.reps} rep${l.reps === 1 ? "" : "s"}`;
+    const how = bwMove ? `${l.kg > 0 ? (EX[l.ex].as ? "Bodyweight with " + WU(l.kg) + " assistance" : "Bodyweight + " + WU(l.kg)) : "Bodyweight"} for ${l.reps} rep${l.reps === 1 ? "" : "s"}` : `${WU(l.kg)} for ${l.reps} rep${l.reps === 1 ? "" : "s"}`;
     setTimeout(() => celebrate([{kind: !before ? "unlock" : after.i > before.i ? "rank" : "tier", rk:after, prev:before, lift:l.ex, pfFrom:0, pfTo:0,
       note: `${how} ranks your ${l.ex.toLowerCase()} ${after.label}${before ? " (was " + before.label + ")" : ""}.`}]), 350);
   }
