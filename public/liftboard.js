@@ -1628,7 +1628,8 @@ $("watch").addEventListener("click", e => {
   if (e.target.closest("#watchMore")){ ui.watchOpen = !ui.watchOpen; renderWatch(); return; } const b = e.target.closest("[data-ex]"); if (b){ ui.ex = b.dataset.ex; $("lfEx").value = ui.ex; renderTrain(); } });
 $("metricSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.metric = b.dataset.v; renderTrain(); } });
 $("rangeSeg").addEventListener("click", e => { const b = e.target.closest("button"); if (b){ ui.range = +b.dataset.v; renderTrain(); } });
-$("lfEx").innerHTML = GROUPS.map(g => `<optgroup label="${g}">${CAT.filter(c => c[1] === g).map(c => `<option>${esc(c[0])}</option>`).join("")}</optgroup>`).join("");
+$("lfEx").innerHTML = GROUPS.map(g => `<optgroup label="${g}">${CAT.filter(c => c[1] === g).sort((a, b) => a[0].localeCompare(b[0])).map(c => `<option>${esc(c[0])}</option>`).join("")}</optgroup>`).join("");
+$("lfEx").value = ui.ex;
 $("lfD").value = today();
 ["lfW","lfR","lfEx"].forEach(id => $(id).addEventListener("input", liftHint));
 $("lfEx").addEventListener("change", () => { lfLabel(); if (EX[$("lfEx").value] && EX[$("lfEx").value].f) $("lfW").value = 0; liftHint(); });
