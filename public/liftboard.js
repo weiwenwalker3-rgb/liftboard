@@ -123,7 +123,7 @@ function ensureSeen(){ if (!state.seen || !state.seen.lifts) state.seen = {lifts
 function syncSeen(doc){ ensureSeen(); const p = {bw:num(doc.bw), lifts:cleanLifts(doc.lifts), bot:false}; ARENA.forEach(A => { const rk = liftRank(p, A.name); if (rk && rk.score > (state.seen.lifts[A.name] ?? -1)) state.seen.lifts[A.name] = rk.score; }); }
 ensureSeen();
 let submitting = false;
-const ui = {muscle:"", rkGroup:"All", rkQ:"", watchOpen:false, rkEx:"", scope:"all", pendingRef:"", froze:0, lost:0, tab:"arena", ex:"Squat", metric:"e1rm", range:180, board:"total", claimLift:"Squat", ladderLift:"Squat", bots:null};
+const ui = {pin:null, tipOpen:false, histOpen:false, histN:30, histEx:"", muscle:"", rkGroup:"All", rkQ:"", watchOpen:false, rkEx:"", scope:"all", pendingRef:"", froze:0, lost:0, tab:"arena", ex:"Squat", metric:"e1rm", range:180, board:"total", claimLift:"Squat", ladderLift:"Squat", bots:null};
 
 /* ---------- accounts + shared board (db + user capabilities) ---------- */
 let db = null, user = null, myId = null, cloud = false, canPost = true, me = null;
@@ -220,8 +220,9 @@ function series(ex, metric){
   state.lifts.filter(l => l.ex === ex).forEach(l => {
     const v = metric === "e1rm" ? e1rm(load(l),l.reps) : metric === "top" ? (EX[ex] && EX[ex].as ? load(l) : l.kg) : (EX[ex] && EX[ex].as ? load(l) : l.kg)*l.reps*l.sets;
     const cur = byDay[l.date];
-    if (metric === "vol"){ if (cur){ cur.v += v; cur.n++; } else byDay[l.date] = {t:parse(l.date), v, set:l, n:1}; }
-    else if (!cur || v > cur.v) byDay[l.date] = {t:parse(l.date), v, set:l};
+    if (!cur){ byDay[l.date] = {t:parse(l.date), v, set:l, n:1, all:[l]}; return; }
+    cur.n++; cur.all.push(l);
+    if (metric === "vol") cur.v += v; else if (v > cur.v){ cur.v = v; cur.set = l; }
   });
   return Object.values(byDay).sort((a,b) => a.t - b.t);
 }
@@ -1207,9 +1208,7 @@ function renderTrain(){
   $("cFoot").innerHTML = bs ? `<span>Best est. 1RM <b>${WU(e1rm(load(bs),bs.reps))}</b> (${setTxt(bs)} × ${bs.reps}, ${shortDate(parse(bs.date))})</span><span>Ratio <b>${(best(ui.ex)/state.profile.bw).toFixed(2)}× BW</b></span><span>Sessions in range <b>${pts.length}</b></span>` : "<span>No sets yet for this lift.</span>";
   lfLabel();
   if (!$("lfW").value) $("lfW").value = unit() === "kg" ? 100 : 225;
-  const rows = [...state.lifts].sort((a,b) => b.date.localeCompare(a.date)).slice(0,10);
-  $("recent").innerHTML = rows.map(l => `<tr><td class="mono">${shortDate(parse(l.date))}</td><td>${esc(l.ex)}</td><td class="r mono">${setTxt(l)} × ${l.reps} × ${l.sets}</td><td class="r mono">${W(e1rm(load(l),l.reps))}</td><td class="r"><button class="x" type="button" data-del-lift="${esc(l.id)}" aria-label="Delete set">✕</button></td></tr>`).join("")
-    || `<tr><td colspan="5" class="muted">No sets yet. Log your first one on the left.</td></tr>`;
+  renderHistory();
   liftHint();
   renderLiftRanks();
   drawTrainCharts();
@@ -1454,26 +1453,71 @@ function renderLiftRanks(gridOnly){
 const drawMain = () => { const pts = inRange(series(ui.ex, ui.metric), ui.range).map(p => Object.assign({}, p, {v:toU(p.v)})), t1 = parse(today()); mainGeo = drawChart($("mainChart"), pts, {t0: ui.range ? t1 - ui.range*DAY : undefined, t1}); };
 function drawTrainCharts(){
   document.querySelectorAll("canvas[data-spark]").forEach(cv => drawChart(cv, inRange(series(cv.dataset.spark,"e1rm"),90), {mini:true}));
-  drawMain(); $("tip").hidden = true;
+  drawMain(); ui.pin = null; $("tip").hidden = true;
 }
-function hover(ev){
-  if (!mainGeo) return;
+function nearPt(ev){
+  if (!mainGeo) return null;
   const r = $("mainChart").getBoundingClientRect(), px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
   let near = null, dmin = 1e9;
   mainGeo.pts.forEach(p => { const d = Math.abs(mainGeo.X(p.t) - px); if (d < dmin){ dmin = d; near = p; } });
+  return near;
+}
+const setLine = l => `${setTxt(l)} × ${l.reps} × ${l.sets}`;
+function tipHTML(p){
+  const n = p.all.length, open = ui.pin === p.t && ui.tipOpen, vol = ui.metric === "vol";
+  const shown = open ? p.all : vol ? p.all.slice(0,3) : [p.set];
+  const more = vol ? n > 3 : n > 1, lbl = n + " entr" + (n > 1 ? "ies" : "y");
+  return `<div class="tip-h">${shortDate(p.t)} · <b>${fmt(p.v)} ${unit()}</b>${ui.pin === p.t ? `<button class="tip-x" type="button" data-tip-x aria-label="Close">✕</button>` : ""}</div>`
+    + `<ul class="tip-sets${open ? " open" : ""}">${shown.map(l => `<li${!vol && l === p.set && n > 1 ? ' class="top"' : ""}>${setLine(l)}</li>`).join("")}</ul>`
+    + (more ? `<button class="tip-more" type="button" data-tip-more aria-expanded="${open}">${lbl} ${open ? "▴" : "▾"}</button>` : vol ? `<span class="tip-n">${lbl}</span>` : "");
+}
+function hover(ev, near){
+  near = near || nearPt(ev);
   if (!near) return;
   drawMain();
   const g = mainGeo, ctx = $("mainChart").getContext("2d"), x = g.X(near.t), y = g.Y(near.v);
   ctx.save(); ctx.strokeStyle = g.col; ctx.globalAlpha = .55; ctx.setLineDash([3,4]); ctx.beginPath(); ctx.moveTo(x,g.pad.t); ctx.lineTo(x,g.h-g.pad.b); ctx.moveTo(g.pad.l,y); ctx.lineTo(g.w-g.pad.r,y); ctx.stroke(); ctx.restore();
   ctx.fillStyle = g.col; ctx.beginPath(); ctx.arc(x,y,4,0,7); ctx.fill();
-  const s = near.set, tip = $("tip");
-  tip.innerHTML = `${shortDate(near.t)} · <b>${fmt(near.v)} ${unit()}</b><br><span>${ui.metric === "vol" ? near.n + " entr" + (near.n>1?"ies":"y") : W(s.kg)+" × "+s.reps+" × "+s.sets}</span>`;
-  tip.hidden = false; tip.style.left = Math.min(Math.max(x,70), g.w-70) + "px"; tip.style.top = y + "px";
+  const tip = $("tip");
+  tip.innerHTML = tipHTML(near); tip.hidden = false;
+  tip.classList.toggle("pin", ui.pin === near.t); tip.classList.toggle("below", y < g.h*.45);
+  const half = tip.offsetWidth/2 + 4;
+  tip.style.left = Math.min(Math.max(x, half), g.w - half) + "px"; tip.style.top = y + "px";
 }
-$("mainChart").addEventListener("mousemove", hover);
-$("mainChart").addEventListener("touchmove", hover, {passive:true});
-$("mainChart").addEventListener("touchstart", hover, {passive:true});
-$("mainChart").addEventListener("mouseleave", () => { drawMain(); $("tip").hidden = true; });
+// hover previews a day; click/tap pins it so the "# entries" dropdown can be opened
+const pinnedPt = () => mainGeo && ui.pin !== null ? mainGeo.pts.find(p => p.t === ui.pin) : null;
+$("mainChart").addEventListener("mousemove", ev => { if (ui.pin === null) hover(ev); });
+$("mainChart").addEventListener("touchmove", ev => { ui.pin = null; hover(ev); }, {passive:true});
+$("mainChart").addEventListener("touchstart", ev => { ui.pin = null; hover(ev); }, {passive:true});
+$("mainChart").addEventListener("mouseleave", () => { if (ui.pin === null){ drawMain(); $("tip").hidden = true; } });
+$("mainChart").addEventListener("click", ev => {
+  const near = nearPt(ev); if (!near) return;
+  if (ui.pin === near.t){ ui.pin = null; hover(ev, near); return; }
+  ui.pin = near.t; ui.tipOpen = false; hover(ev, near);
+});
+$("tip").addEventListener("click", e => {
+  e.stopPropagation();
+  const p = pinnedPt();
+  if (e.target.closest("[data-tip-x]") || !p){ ui.pin = null; drawMain(); $("tip").hidden = true; return; }
+  if (e.target.closest("[data-tip-more]")){ ui.tipOpen = !ui.tipOpen; hover(null, p); }
+});
+document.addEventListener("click", e => { if (ui.pin !== null && !e.target.closest("#tip, #mainChart")){ ui.pin = null; drawMain(); $("tip").hidden = true; } });
+// Recent sets: 10 newest, or the full log (filterable, 30 rows at a time) when expanded
+function renderHistory(){
+  const all = [...state.lifts].reverse().sort((a,b) => b.date.localeCompare(a.date));
+  const exs = [...new Set(all.map(l => l.ex))].sort();
+  if (ui.histEx && !exs.includes(ui.histEx)) ui.histEx = "";
+  const list = ui.histOpen && ui.histEx ? all.filter(l => l.ex === ui.histEx) : all;
+  const rows = list.slice(0, ui.histOpen ? ui.histN : 10);
+  $("histTitle").textContent = ui.histOpen ? "All sets" : "Recent sets";
+  const sel = $("histEx"); sel.hidden = !ui.histOpen;
+  if (ui.histOpen) sel.innerHTML = `<option value="">All lifts</option>` + exs.map(x => `<option${x === ui.histEx ? " selected" : ""}>${esc(x)}</option>`).join("");
+  $("recent").innerHTML = rows.map(l => `<tr><td class="mono">${shortDate(parse(l.date))}${parse(l.date) < parse(today()) - 300*DAY ? " '" + l.date.slice(2,4) : ""}</td><td>${esc(l.ex)}</td><td class="r mono">${setTxt(l)} × ${l.reps} × ${l.sets}</td><td class="r mono">${W(e1rm(load(l),l.reps))}</td><td class="r"><button class="x" type="button" data-del-lift="${esc(l.id)}" aria-label="Delete set">✕</button></td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">No sets yet. Log your first one on the left.</td></tr>`;
+  $("histCtl").innerHTML = !ui.histOpen
+    ? (all.length > 10 ? `<button class="btn sm" type="button" data-hist="open">Show all ${all.length} sets ▾</button>` : "")
+    : `<span class="muted">Showing ${rows.length} of ${list.length}</span>${list.length > rows.length ? `<button class="btn sm" type="button" data-hist="more">Show ${Math.min(30, list.length - rows.length)} more</button>` : ""}<button class="btn sm" type="button" data-hist="close">Collapse ▴</button>`;
+}
 function liftHint(){ const ex = $("lfEx").value, r = num($("lfR").value), w = EX[ex] && EX[ex].f ? load({ex, kg:Math.max(0, fromU(num($("lfW").value)))}) : fromU(num($("lfW").value)); $("lfHint").textContent = w && r ? `Estimated 1RM for this set: ${WU(e1rm(w,r))}. Your best is ${WU(best($("lfEx").value))}.` : ""; }
 
 /* ---------- fuel ---------- */
@@ -1615,6 +1659,10 @@ $("liftForm").addEventListener("submit", e => {
   }
   commit(pr ? `New best on ${l.ex}: ${WU(e1rm(load(l),l.reps))} est. 1RM. +10 XP` : `Logged ${l.ex} ${setTxt(l)} × ${l.reps} × ${l.sets}. +10 XP`);
 });
+$("histCtl").addEventListener("click", e => { const b = e.target.closest("[data-hist]"); if (!b) return; const v = b.dataset.hist;
+  if (v === "open"){ ui.histOpen = true; ui.histN = 30; } else if (v === "more") ui.histN += 30; else { ui.histOpen = false; ui.histEx = ""; }
+  renderHistory(); });
+$("histEx").addEventListener("change", e => { ui.histEx = e.target.value; ui.histN = 30; renderHistory(); });
 $("recent").addEventListener("click", e => { const b = e.target.closest("[data-del-lift]"); if (b){ state.lifts = state.lifts.filter(l => l.id !== b.dataset.delLift); commit("Set deleted"); } });
 ["ffP","ffC","ffF"].forEach(id => $(id).addEventListener("input", updateCal));
 $("foodForm").addEventListener("submit", e => { e.preventDefault(); state.foods.push({id:uid8(), date:today(), name:$("ffN").value.trim() || "Food", p:num($("ffP").value), c:num($("ffC").value), f:num($("ffF").value)}); $("ffN").value = ""; commit("Added to today"); });
